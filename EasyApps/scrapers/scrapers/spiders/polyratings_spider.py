@@ -1,0 +1,29 @@
+import scrapy
+
+class PolyRatingsSpider(scrapy.Spider):
+    name = "polyratings"
+    start_urls = ["https://api-prod.polyratings.org/professors.all"]  # URL to profs
+
+    def parse(self, response):
+        payload = response.json()
+        professors = payload.get("result", {}).get("data", [])
+
+        for prof in professors[:20]:  # first 20 for testing
+            professor_id = prof.get("id")
+            first = prof.get("firstName", "")
+            last = prof.get("lastName", "")
+            name = f"{last}, {first}".strip(", ").strip()
+
+            yield {
+                "professor_id": professor_id,
+                "name": name,
+                "department": prof.get("department"),
+                "numEvals": prof.get("numEvals"),
+                "overallRating": prof.get("overallRating"),
+                "materialClear": prof.get("materialClear"),
+                "studentDifficulties": prof.get("studentDifficulties"),
+                "courses": prof.get("courses", []),
+                "tags": prof.get("tags", {}),
+                "polyratings_url": f"https://polyratings.dev/professor/{professor_id}" if professor_id else None,
+            }
+
