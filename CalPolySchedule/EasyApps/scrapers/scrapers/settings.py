@@ -62,9 +62,9 @@ ROBOTSTXT_OBEY = True
 
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-ITEM_PIPELINES = {
-    "scrapers.pipelines.PolyRatingsPostgresPipeline": 300,
-}
+# Pipelines are set per-spider via custom_settings so each spider
+# only activates its own pipeline (see each spider file).
+ITEM_PIPELINES = {}
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html

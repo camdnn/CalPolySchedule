@@ -4,6 +4,12 @@ class PolyRatingsSpider(scrapy.Spider):
     name = "polyratings"
     start_urls = ["https://api-prod.polyratings.org/professors.all"]  # URL to profs
 
+    custom_settings = {
+        "ITEM_PIPELINES": {
+            "scrapers.pipelines.PolyRatingsPostgresPipeline": 300,
+        },
+    }
+
     def parse(self, response):
         payload = response.json()
         professors = payload.get("result", {}).get("data", [])

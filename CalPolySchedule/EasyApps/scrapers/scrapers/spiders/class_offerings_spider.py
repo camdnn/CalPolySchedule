@@ -1,82 +1,194 @@
 import scrapy
-from urllib.parse import urlencode
+
 
 class ClassOfferingsSpider(scrapy.Spider):
+    """
+    Scrapes all class offerings for the current term from schedules.calpoly.edu.
+
+    Flow:
+      1. Homepage  → extract term code (e.g. "2262") and term name
+      2. 7 college subject-listing pages → collect subject page links
+      3. Each subject page (e.g. subject_CSC_curr.htm) has every section
+         for that subject in one HTML table → parse rows → yield items
+    """
+
     name = "class_offerings"
-    
-    #starter url
-    API_URL = "https://cmsweb.pscs.calpoly.edu/psc/CSLOPRD/EMPLOYEE/SA/s/WEBLIB_HCX_CM.H_CLASS_SEARCH.FieldFormula.IScript_ClassSearch"
+
+    BASE_URL = "https://schedules.calpoly.edu/"
+
+    # One subject-listing page per college, plus the catch-all
+    COLLEGE_SUBJECT_PAGES = [
+        "all_subject_10-CAGR_curr.htm",  # Ag, Food & Envr Sci
+        "all_subject_20-CAED_curr.htm",  # Arch & Envr Design
+        "all_subject_40-OCOB_curr.htm",  # Business
+        "all_subject_48-CLA_curr.htm",   # Liberal Arts
+        "all_subject_52-CENG_curr.htm",  # Engineering
+        "all_subject_76-CSM_curr.htm",   # Science & Math
+        "all_subject_99-ALL_curr.htm",   # Honors, athletics, etc.
+    ]
+
+    # Each spider activates only its own pipeline
+    custom_settings = {
+        "ITEM_PIPELINES": {
+            "scrapers.pipelines.ClassOfferingsPostgresPipeline": 300,
+        },
+    }
+
+    # ── Step 1: Start at the homepage ──────────────────────────────────
 
     def start_requests(self):
-        # Start with page 1 only. We learn term + pageCount from its JSON.
-        params = {
-            "institution": "SLCMP",
-            "term": "2262",          # TEMP bootstrap (see parse_first_page to make it dynamic)
-            "enrl_stat": "O",
-            "crse_attr": "",
-            "crse_attr_value": "",
-            "page": 1,
-        }
-        url = f"{self.API_URL}?{urlencode(params)}"
-        yield scrapy.Request(url=url, callback=self.parse_first_page, cb_kwargs={"params_base": params})
+        yield scrapy.Request(
+            url=self.BASE_URL + "index_curr.htm",
+            callback=self.parse_homepage,
+        )
 
-    def parse_first_page(self, response, params_base):
-        data = response.json()
+    def parse_homepage(self, response):
+        # Term code lives in <span class="term">2262 </span>
+        term_code = response.css("span.term::text").get("").strip()
 
-        # 1) Extract the list of classes from the JSON.
-        # You will set this to the correct key path once you confirm it.
-        classes = data.get("classes") or data.get("result", {}).get("data") or []
+        # Term name is in a season-specific span class
+        term_name = ""
+        for season in ("termWinter", "termSpring", "termSummer", "termFall"):
+            text = response.css(f"span.{season}::text").get("")
+            if text.strip():
+                term_name = text.strip()
+                break
 
-        if not classes:
-            self.logger.warning("No classes found on page 1; check JSON key path.")
+        # Date range, e.g. "January 5, 2026 to March 13, 2026"
+        term_date_text = response.css("span.termDate::text").get("").strip()
+
+        if not term_code:
+            self.logger.error("Could not extract term code from homepage.")
             return
 
-        # 2) Term becomes dynamic: read from the first class object.
-        term = classes[0].get("strm")
+        self.logger.info(f"Term {term_code}: {term_name} ({term_date_text})")
 
-        # 3) Page count becomes dynamic.
-        page_count = data.get("pageCount") or data.get("totalPages") or 1
+        # Carry term metadata through all subsequent requests
+        meta = {
+            "term_code": term_code,
+            "term_name": term_name,
+            "term_date_text": term_date_text,
+        }
 
-        # 4) Parse page 1 items.
-        yield from self.parse_classes(classes, term)
+        # ── Step 2: follow each college's subject-listing page ─────────
+        for page in self.COLLEGE_SUBJECT_PAGES:
+            yield scrapy.Request(
+                url=self.BASE_URL + page,
+                callback=self.parse_college_subjects,
+                meta=meta,
+            )
 
-        # 5) Schedule remaining pages.
-        for page in range(2, int(page_count) + 1):
-            params = dict(params_base)
-            params["term"] = term
-            params["page"] = page
-            url = f"{self.API_URL}?{urlencode(params)}"
-            yield scrapy.Request(url=url, callback=self.parse_page, cb_kwargs={"term": term})
+    # ── Step 2: Collect subject page links ─────────────────────────────
 
-    def parse_page(self, response, term):
-        data = response.json()
-        classes = data.get("classes") or data.get("result", {}).get("data") or []
-        yield from self.parse_classes(classes, term)
+    def parse_college_subjects(self, response):
+        """
+        Each college page has rows like:
+          <td class="subjectCode"><a href="subject_CSC_curr.htm">CSC</a></td>
+        Follow every subject_*_curr.htm link.
+        Scrapy's dupe filter prevents re-fetching a subject that appears
+        under multiple colleges.
+        """
+        for link in response.css("td.subjectCode a"):
+            href = link.attrib.get("href", "")
+            if href.startswith("subject_") and href.endswith("_curr.htm"):
+                yield scrapy.Request(
+                    url=response.urljoin(href),
+                    callback=self.parse_subject_page,
+                    meta=response.meta,
+                )
 
-    def parse_classes(self, classes, term):
-        # This function flattens each class’s meetings into one-row-per-meeting.
-        for cls in classes:
-            # pick the instructor name: sometimes it's in instructors[], sometimes in each meeting
-            instructor_name = None
-            if cls.get("instructors"):
-                instructor_name = cls["instructors"][0].get("name")
+    # ── Step 3: Parse the class table on a subject page ────────────────
 
-            for mtg in cls.get("meetings", []) or []:
-                yield {
-                    "term": term,
-                    "subject": cls.get("subject"),
-                    "catalog_nbr": cls.get("catalog_nbr"),
-                    "descr": cls.get("descr"),
-                    "component": cls.get("component"),
-                    "class_section": cls.get("class_section"),
-                    "class_nbr": cls.get("class_nbr"),
-                    "units": cls.get("units"),
-                    "instruction_mode_descr": cls.get("instruction_mode_descr"),
+    def parse_subject_page(self, response):
+        """
+        The table on e.g. subject_CSC_curr.htm contains one <tr> per section:
 
-                    "days": mtg.get("days"),
-                    "start_time": mtg.get("start_time"),
-                    "end_time": mtg.get("end_time"),
-                    "facility_descr": mtg.get("facility_descr"),
-                    "instructor_name": mtg.get("instructor") or instructor_name,
-                }
+        Columns (css classes):
+          courseName | courseSection | courseClass | courseType |
+          courseRequirement | courseRequisites |
+          courseDays | startTime | endTime |
+          personName | location |
+          count (×5: LCap, ECap, Enrl, Wait, Drop) | calendarICS
+        """
+        term_code = response.meta["term_code"]
+        term_name = response.meta["term_name"]
+        term_date_text = response.meta["term_date_text"]
 
+        for row in response.css("table#listing tbody tr"):
+            # Skip cancelled sections (class="entry1 cancelled")
+            if "cancelled" in row.attrib.get("class", ""):
+                continue
+
+            # ── Course name (e.g. "CSC 101") ──
+            course_text = row.css("td.courseName a::text").get("").strip()
+            if not course_text:
+                continue
+            parts = course_text.split(None, 1)
+            if len(parts) < 2:
+                continue
+            subject, catalog_nbr = parts
+
+            # Course title from the <a title="..."> attribute
+            # Format: "Computer Science 101 Fundamentals of Computer Science"
+            # We strip the subject-description + catalog_nbr prefix.
+            title_attr = row.css("td.courseName a::attr(title)").get("")
+            descr = ""
+            if title_attr and catalog_nbr in title_attr:
+                idx = title_attr.index(catalog_nbr) + len(catalog_nbr)
+                descr = title_attr[idx:].strip()
+
+            # ── Class number (unique per section) ──
+            class_nbr_text = row.css("td.courseClass::text").get("").strip()
+            if not class_nbr_text or class_nbr_text.startswith("*"):
+                continue
+            try:
+                class_nbr = int(class_nbr_text)
+            except ValueError:
+                continue
+
+            # ── Other fields ──
+            class_section = row.css("td.courseSection::text").get("").strip()
+            component = row.css("td.courseType span::text").get("").strip()
+            days = row.css("td.courseDays span::text").get("").strip() or None
+            start_time = row.css("td.startTime::text").get("").strip() or None
+            end_time = row.css("td.endTime::text").get("").strip() or None
+
+            # Full instructor name from <a title="Hisham H. Assal">
+            instructor_name = (
+                row.css("td.personName a::attr(title)").get("").strip() or None
+            )
+
+            # Full location from <a title="Pilling Building Room 0247">
+            facility_descr = (
+                row.css("td.location a::attr(title)").get("").strip() or None
+            )
+
+            # ── Enrollment availability ──
+            # Count cells in order: LCap, ECap, Enrl, Wait, Drop
+            counts = row.css("td.count::text").getall()
+            enrollment_available = None
+            if len(counts) >= 3:
+                try:
+                    ecap = int(counts[1].strip())
+                    enrl = int(counts[2].strip())
+                    enrollment_available = max(0, ecap - enrl)
+                except (ValueError, IndexError):
+                    pass
+
+            yield {
+                "term": term_code,
+                "term_name": term_name,
+                "term_date_text": term_date_text,
+                "subject": subject,
+                "catalog_nbr": catalog_nbr,
+                "descr": descr,
+                "class_section": class_section,
+                "class_nbr": class_nbr,
+                "component": component,
+                "days": days,
+                "start_time": start_time,
+                "end_time": end_time,
+                "instructor_name": instructor_name,
+                "facility_descr": facility_descr,
+                "enrollment_available": enrollment_available,
+            }
