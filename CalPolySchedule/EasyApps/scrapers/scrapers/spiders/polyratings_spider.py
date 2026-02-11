@@ -17,13 +17,10 @@ class PolyRatingsSpider(scrapy.Spider):
             yield {
                 "professor_id": professor_id,
                 "name": name,
-                "department": prof.get("department"),
-                "numEvals": prof.get("numEvals"),
                 "overallRating": prof.get("overallRating"),
-                "materialClear": prof.get("materialClear"),
                 "studentDifficulties": prof.get("studentDifficulties"),
-                "courses": prof.get("courses", []),
+                "clarity": prof.get("materialClear"),
+                "numEvals": prof.get("numEvals"),
                 "tags": prof.get("tags", {}),
-                "polyratings_url": f"https://polyratings.dev/professor/{professor_id}" if professor_id else None,
             }
 
