@@ -34,8 +34,7 @@ class ClassOfferingsSpider(scrapy.Spider):
         },
     }
 
-    # ── Step 1: Start at the homepage ──────────────────────────────────
-
+    # ── Start at the homepage ──────────────────────────────────
     def start_requests(self):
         yield scrapy.Request(
             url=self.BASE_URL + "index_curr.htm",
@@ -63,19 +62,19 @@ class ClassOfferingsSpider(scrapy.Spider):
 
         self.logger.info(f"Term {term_code}: {term_name} ({term_date_text})")
 
-        # Carry term metadata through all subsequent requests
+        # Carry term metadata through all requests
         meta = {
             "term_code": term_code,
             "term_name": term_name,
             "term_date_text": term_date_text,
         }
 
-        # ── Step 2: follow each college's subject-listing page ─────────
+        # ── follow each college's subject-listing page ─────────
         for page in self.COLLEGE_SUBJECT_PAGES:
             yield scrapy.Request(
                 url=self.BASE_URL + page,
-                callback=self.parse_college_subjects,
-                meta=meta,
+                callback=self.parse_college_subjects, # parse the data for each college page
+                meta=meta,                            # keep the term name code and date
             )
 
     # ── Step 2: Collect subject page links ─────────────────────────────

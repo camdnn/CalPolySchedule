@@ -34,12 +34,12 @@ class PolyRatingsPostgresPipeline:
         VALUES (%s, %s, %s, %s, %s, NOW(), %s)
         ON CONFLICT (professor_key)
         DO UPDATE SET
-        professor_name = EXCLUDED.professor_name,
-        overall_rating = EXCLUDED.overall_rating,
-        student_difficulties = EXCLUDED.student_difficulties,
-        clarity = EXCLUDED.clarity,
-        num_evals = EXCLUDED.num_evals,
-        last_scraped = NOW()
+        professor_name          = EXCLUDED.professor_name,
+        overall_rating          = EXCLUDED.overall_rating,
+        student_difficulties    = EXCLUDED.student_difficulties,
+        clarity                 = EXCLUDED.clarity,
+        num_evals               = EXCLUDED.num_evals,
+        last_scraped            = NOW()
         RETURNING id;
         """
 

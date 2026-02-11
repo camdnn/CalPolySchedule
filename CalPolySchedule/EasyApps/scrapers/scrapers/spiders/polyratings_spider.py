@@ -14,7 +14,7 @@ class PolyRatingsSpider(scrapy.Spider):
         payload = response.json()
         professors = payload.get("result", {}).get("data", [])
 
-        for prof in professors[:20]:  # first 20 for testing
+        for prof in professors:  # first 20 for testing
             professor_id = prof.get("id")
             first = prof.get("firstName", "")
             last = prof.get("lastName", "")
