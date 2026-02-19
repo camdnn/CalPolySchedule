@@ -116,7 +116,7 @@ export default function ClassResultsPanel({
             className="bg-white border border-gray-200 rounded-2xl mb-5 overflow-hidden shadow-sm"
           >
             {/* Course header */}
-            <div className="px-6 py-4 border-b border-gray-100">
+            <div className="px-4 md:px-6 py-4 border-b border-gray-100">
               <div className="flex items-baseline gap-3">
                 <h3 className="text-base font-bold text-gray-950">{courseKey}</h3>
                 {courseName && <span className="text-gray-500 text-sm">{courseName}</span>}
@@ -142,7 +142,7 @@ export default function ClassResultsPanel({
                   return (
                     <div
                       key={`${section.class_nbr}-${section.days}-${section.start_time}-${section.class_section}`}
-                      className={`group px-6 py-4 transition-colors duration-100 ${
+                      className={`group px-4 md:px-6 py-4 transition-colors duration-100 ${
                         isLocked ? "bg-green-50/50" : "hover:bg-gray-50"
                       }`}
                     >

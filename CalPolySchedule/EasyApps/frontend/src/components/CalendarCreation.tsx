@@ -81,6 +81,7 @@ export default function Dashboard() {
   const [progressCount, setProgressCount]           = useState(0);
 
   const [viewMode, setViewMode] = useState<ViewMode>("sections");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Load terms on mount
   useEffect(() => {
@@ -270,15 +271,49 @@ export default function Dashboard() {
   const defaultSort  = daysMode === "minimize" ? "fewest-days" as const : "rating" as const;
 
   return (
-    <div className="min-h-screen bg-white flex">
+    <div className="min-h-screen bg-white flex flex-col">
+
+      {/* ── Mobile header ────────────────────────────────────────────── */}
+      <header className="md:hidden flex items-center gap-3 px-4 h-14 bg-white border-b border-gray-200 sticky top-0 z-30 flex-shrink-0">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
+          aria-label="Open menu"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 bg-green-600 rounded-md" />
+          <span className="text-sm font-bold text-gray-950 tracking-tight">Mustang Scheduler</span>
+        </div>
+      </header>
+
+      <div className="flex flex-1">
+
+      {/* ── Sidebar backdrop ─────────────────────────────────────────── */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
-      <aside className="w-80 flex-shrink-0 border-r border-gray-200 sticky top-0 h-screen overflow-y-auto">
+      <aside className={`fixed md:sticky top-0 inset-y-0 left-0 z-40 w-80 flex-shrink-0 border-r border-gray-200 h-screen overflow-y-auto bg-white transform transition-transform duration-300 ease-in-out md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="p-6">
           {/* Wordmark */}
-          <div className="flex items-center gap-2.5 mb-8">
-            <div className="w-7 h-7 bg-green-600 rounded-md" />
-            <span className="text-base font-bold text-gray-950 tracking-tight">Mustang Scheduler</span>
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 bg-green-600 rounded-md" />
+              <span className="text-base font-bold text-gray-950 tracking-tight">Mustang Scheduler</span>
+            </div>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="md:hidden p-1 text-gray-400 hover:text-gray-700 text-lg leading-none cursor-pointer"
+              aria-label="Close menu"
+            >✕</button>
           </div>
 
           {/* ── Term ──────────────────────────────────────────────── */}
@@ -562,7 +597,7 @@ export default function Dashboard() {
       </aside>
 
       {/* ── Main area ────────────────────────────────────────────────── */}
-      <main className="flex-1 p-8 overflow-y-auto bg-gray-50 min-h-screen">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto bg-gray-50 min-h-screen">
         {/* Active filter chips */}
         {activeChips.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-6">
@@ -617,6 +652,7 @@ export default function Dashboard() {
           />
         )}
       </main>
+      </div>
     </div>
   );
 }

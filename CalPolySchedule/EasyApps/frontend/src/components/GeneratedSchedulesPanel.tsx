@@ -362,8 +362,9 @@ export default function GeneratedSchedulesPanel({
 
         <div className="flex items-center gap-2 flex-wrap">
           {/* Sort pills */}
+          <div className="overflow-x-auto max-w-[calc(100vw-8rem)] md:max-w-none">
           <div
-            className="flex rounded-lg overflow-hidden border border-gray-200"
+            className="flex rounded-lg overflow-hidden border border-gray-200 min-w-max"
             role="radiogroup"
             aria-label="Sort schedules by"
           >
@@ -382,6 +383,7 @@ export default function GeneratedSchedulesPanel({
                 {label}
               </button>
             ))}
+          </div>
           </div>
 
           {/* Compare toggle */}
