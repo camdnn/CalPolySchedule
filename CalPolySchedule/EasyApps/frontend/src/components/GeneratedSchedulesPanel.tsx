@@ -312,7 +312,9 @@ export default function GeneratedSchedulesPanel({
   const [sortMode, setSortMode]         = useState<SortMode>(defaultSort);
   const [compareMode, setCompareMode]   = useState(false);
   const [compareSelected, setCompare]   = useState<number[]>([]); // indices into sorted list
+  // Tracks which schedule cards have their class-number panel expanded.
   const [openNbrCards, setOpenNbrCards] = useState<Set<number>>(new Set());
+  // Stores the most recently copied card index for temporary success feedback.
   const [copiedIdx, setCopiedIdx]       = useState<number | null>(null);
 
   // Reset compare + sort when new schedules arrive
@@ -356,6 +358,7 @@ export default function GeneratedSchedulesPanel({
 
   const sorted = sortSchedules(schedules, sortMode);
 
+  // Toggle visibility of the per-card class-number quick panel.
   function toggleNbrs(idx: number) {
     setOpenNbrCards((prev) => {
       const next = new Set(prev);
@@ -364,6 +367,7 @@ export default function GeneratedSchedulesPanel({
     });
   }
 
+  // Copies one class number per line for easy pasting into registration tools.
   function copyNbrs(idx: number, sections: ScheduleRowProps[]) {
     const text = sections.map((s) => s.class_nbr).join("\n");
     navigator.clipboard.writeText(text);
@@ -380,6 +384,7 @@ export default function GeneratedSchedulesPanel({
     });
   }
 
+  // Drawer opens only after compare mode is enabled and exactly two cards picked.
   const compareOpen = compareMode && compareSelected.length === 2;
 
   return (
@@ -626,6 +631,7 @@ export default function GeneratedSchedulesPanel({
       {/* ── Compare drawer ─────────────────────────────────────────────── */}
       {compareOpen && (
         <CompareDrawer
+          // Selected indexes refer to the already-sorted list shown on screen.
           scheduleA={sorted[compareSelected[0]]}
           scheduleB={sorted[compareSelected[1]]}
           idxA={compareSelected[0]}
