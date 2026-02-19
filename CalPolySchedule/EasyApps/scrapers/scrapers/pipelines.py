@@ -297,6 +297,23 @@ class ClassOfferingsPostgresPipeline:
                 "Term %s: wrote %d class offerings.", term_code, len(rows)
             )
 
+        # Remove any terms (and their offerings) that weren't scraped this run.
+        # This keeps the DB to exactly one term at a time.
+        scraped_codes = list(by_term.keys())
+        with self.conn.transaction():
+            self.cur.execute(
+                "DELETE FROM class_offerings WHERE term_id IN "
+                "(SELECT id FROM terms WHERE term_code != ALL(%s));",
+                (scraped_codes,),
+            )
+            self.cur.execute(
+                "DELETE FROM terms WHERE term_code != ALL(%s);",
+                (scraped_codes,),
+            )
+        spider.logger.info(
+            "Pruned stale terms; keeping only: %s", scraped_codes
+        )
+
         if saw_new_term:
             # Business rule: refresh professors when a new term is detected.
             # On failure we log and keep existing professor data.

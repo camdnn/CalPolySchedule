@@ -42,13 +42,13 @@ class ClassOfferingsSpider(scrapy.Spider):
     # One subject-listing page per college, plus the catch-all.
     # Used as fallback if term homepages do not expose the links directly.
     COLLEGE_SUBJECT_PAGES = [
-        "all_subject_10-CAGR_curr.htm",  # Ag, Food & Envr Sci
-        "all_subject_20-CAED_curr.htm",  # Arch & Envr Design
-        "all_subject_40-OCOB_curr.htm",  # Business
-        "all_subject_48-CLA_curr.htm",   # Liberal Arts
-        "all_subject_52-CENG_curr.htm",  # Engineering
-        "all_subject_76-CSM_curr.htm",   # Science & Math
-        "all_subject_99-ALL_curr.htm",   # Honors, athletics, etc.
+        "all_subject_10-CAGR_next.htm",  # Ag, Food & Envr Sci
+        "all_subject_20-CAED_next.htm",  # Arch & Envr Design
+        "all_subject_40-OCOB_next.htm",  # Business
+        "all_subject_48-CLA_next.htm",   # Liberal Arts
+        "all_subject_52-CENG_next.htm",  # Engineering
+        "all_subject_76-CSM_next.htm",   # Science & Math
+        "all_subject_99-ALL_next.htm",   # Honors, athletics, etc.
     ]
 
     # Each spider activates only its own pipeline
@@ -64,7 +64,7 @@ class ClassOfferingsSpider(scrapy.Spider):
     def start_requests(self):
         # Entry point for this spider. We start from the current-term index
         # and then follow term-specific subject links found there.
-        yield scrapy.Request(url=self.BASE_URL + "index_curr.htm", callback=self.parse_homepage)
+        yield scrapy.Request(url=self.BASE_URL + "index_next.htm", callback=self.parse_homepage)
 
     def parse_homepage(self, response):
         # Term code lives in <span class="term">2262 </span>
