@@ -221,9 +221,20 @@ export default function ClassResultsPanel({
                         {/* Instructor + rating + eval count */}
                         {/* Rating is optional; we keep "no rating" explicit so users
                             can distinguish unrated from low-rated instructors. */}
-                        <span className="text-gray-700 text-sm">
-                          👤 {section.instructor_name ?? "Staff"}
-                        </span>
+                        {section.professor_key ? (
+                          <a
+                            href={`https://polyratings.dev/professor/${section.professor_key}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-gray-700 text-sm hover:text-green-700 hover:underline"
+                          >
+                            👤 {section.instructor_name ?? "Staff"}
+                          </a>
+                        ) : (
+                          <span className="text-gray-700 text-sm">
+                            👤 {section.instructor_name ?? "Staff"}
+                          </span>
+                        )}
                         {rating !== null ? (
                           <span className={`text-xs font-bold ${ratingColor(rating)}`}>
                             ★ {rating.toFixed(1)}

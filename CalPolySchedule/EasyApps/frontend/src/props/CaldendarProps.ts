@@ -31,6 +31,7 @@ export interface ScheduleRowProps {
   enrollment_available: number | null;
   overall_rating: number | null;
   num_evals: number | null;
+  professor_key: string | null;
 };
 
 export interface GeneratedSchedule {

@@ -113,7 +113,8 @@ const SELECT_COLS = `
   o.instructor_name,
   o.enrollment_available,
   pr.overall_rating,
-  pr.num_evals
+  pr.num_evals,
+  pr.professor_key
 `;
 
 // Shared join for both endpoints:
