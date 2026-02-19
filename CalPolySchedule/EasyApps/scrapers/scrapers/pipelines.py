@@ -1,9 +1,14 @@
+import os
 import re
 import json
 from urllib.request import urlopen
 from datetime import datetime
+from pathlib import Path
 
 import psycopg
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 POLYRATINGS_URL = "https://api-prod.polyratings.org/professors.all"
 
@@ -94,7 +99,7 @@ def _apply_professor_snapshot(conn, cur, professors):
 class PolyRatingsPostgresPipeline:
 
     def open_spider(self, spider):
-        self.conn = psycopg.connect("host=localhost dbname=postgres")
+        self.conn = psycopg.connect(os.environ["DATABASE_URL"])
         self.cur = self.conn.cursor()
         self._items = []
 
@@ -123,7 +128,7 @@ class ClassOfferingsPostgresPipeline:
     """
 
     def open_spider(self, spider):
-        self.conn = psycopg.connect("host=localhost dbname=postgres")
+        self.conn = psycopg.connect(os.environ["DATABASE_URL"])
         self.cur = self.conn.cursor()
         self._term_id_cache = {}    # term_code → term_id
         self._cleared_terms = set() # term_ids already wiped this run
