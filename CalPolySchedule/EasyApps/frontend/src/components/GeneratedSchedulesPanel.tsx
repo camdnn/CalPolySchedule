@@ -312,6 +312,8 @@ export default function GeneratedSchedulesPanel({
   const [sortMode, setSortMode]         = useState<SortMode>(defaultSort);
   const [compareMode, setCompareMode]   = useState(false);
   const [compareSelected, setCompare]   = useState<number[]>([]); // indices into sorted list
+  const [openNbrCards, setOpenNbrCards] = useState<Set<number>>(new Set());
+  const [copiedIdx, setCopiedIdx]       = useState<number | null>(null);
 
   // Reset compare + sort when new schedules arrive
   // This prevents stale compare selections referencing old result sets.
@@ -353,6 +355,21 @@ export default function GeneratedSchedulesPanel({
   }
 
   const sorted = sortSchedules(schedules, sortMode);
+
+  function toggleNbrs(idx: number) {
+    setOpenNbrCards((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  }
+
+  function copyNbrs(idx: number, sections: ScheduleRowProps[]) {
+    const text = sections.map((s) => s.class_nbr).join("\n");
+    navigator.clipboard.writeText(text);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 1500);
+  }
 
   // Keep a rolling selection of at most 2 schedules.
   function toggleCompare(idx: number) {
@@ -483,7 +500,53 @@ export default function GeneratedSchedulesPanel({
                   no ratings
                 </span>
               )}
+
+              {/* Class numbers toggle */}
+              <button
+                onClick={() => toggleNbrs(idx)}
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-colors cursor-pointer flex-shrink-0 ${
+                  openNbrCards.has(idx)
+                    ? "bg-gray-950 text-white border-gray-950"
+                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                }`}
+                title="Show class numbers"
+              >
+                # Class Nbrs
+              </button>
             </div>
+
+            {/* Class numbers panel */}
+            {openNbrCards.has(idx) && (
+              <div className="px-4 md:px-6 py-3 border-b border-gray-100 bg-gray-50">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                    Class Numbers
+                  </span>
+                  <button
+                    onClick={() => copyNbrs(idx, sched.sections)}
+                    className={`text-xs px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                      copiedIdx === idx
+                        ? "bg-green-600 text-white border-green-600"
+                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {copiedIdx === idx ? "✓ Copied!" : "Copy all"}
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {sched.sections.map((s) => (
+                    <div key={s.class_nbr} className="flex flex-col items-center bg-white border border-gray-200 rounded-lg px-3 py-1.5 min-w-[64px]">
+                      <span className="text-[10px] text-gray-400 leading-none mb-0.5">
+                        {s.subject} {s.catalog_nbr}
+                      </span>
+                      <span className="text-sm font-bold text-gray-950 font-mono leading-none">
+                        {s.class_nbr}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Course color legend */}
             <div className="px-4 md:px-6 pt-4 flex flex-wrap gap-2">
