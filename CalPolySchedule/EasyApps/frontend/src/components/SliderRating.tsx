@@ -1,6 +1,12 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 
-const SliderRating = ({ label, min = 0, max = 100, value, onChange }) => {
+const SliderRating = ({ label, min = 0, max = 100, value, onChange }: {
+  label: string;
+  min?: number;
+  max?: number;
+  value: number;
+  onChange: (val: number) => void;
+}) => {
   const [isDragging, setIsDragging] = useState(false);
 
   const getGradientColor = () => {
@@ -20,7 +26,7 @@ const SliderRating = ({ label, min = 0, max = 100, value, onChange }) => {
           {value}
         </span>
       </div>
-      
+
       <div className="relative">
         <input
           type="range"
@@ -34,14 +40,14 @@ const SliderRating = ({ label, min = 0, max = 100, value, onChange }) => {
           onTouchEnd={() => setIsDragging(false)}
           className="w-full h-3 appearance-none bg-emerald-950/50 rounded-full outline-none cursor-pointer slider"
           style={{
-            background: `linear-gradient(to right, 
-              rgb(16 185 129) 0%, 
-              rgb(132 204 22) ${(value/max)*50}%, 
-              rgb(250 204 21) ${(value/max)*100}%, 
+            background: `linear-gradient(to right,
+              rgb(16 185 129) 0%,
+              rgb(132 204 22) ${(value/max)*50}%,
+              rgb(250 204 21) ${(value/max)*100}%,
               rgb(15 41 30 / 0.5) ${(value/max)*100}%)`
           }}
         />
-        
+
         {isDragging && (
           <div className="absolute -top-12 left-1/2 -translate-x-1/2 animate-bounce">
             <div className={`px-4 py-2 rounded-lg bg-gradient-to-r ${getGradientColor()} text-emerald-950 font-bold shadow-lg`}>

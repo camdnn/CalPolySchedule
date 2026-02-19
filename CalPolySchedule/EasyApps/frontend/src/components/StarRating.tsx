@@ -1,7 +1,11 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 
-const StarRating = ({ label, value, onChange }) => {
-  const [hoveredValue, setHoveredValue] = useState(null);
+const StarRating = ({ label, value, onChange }: {
+  label: string;
+  value: number;
+  onChange: (val: number) => void;
+}) => {
+  const [hoveredValue, setHoveredValue] = useState<number | null>(null);
 
   const stars = [1, 2, 3, 4, 5];
 
@@ -10,7 +14,7 @@ const StarRating = ({ label, value, onChange }) => {
       <label className="block text-lime-400 font-medium mb-4 text-lg">
         {label}
       </label>
-      
+
       <div className="flex gap-2">
         {stars.map((star) => {
           const isActive = star <= (hoveredValue !== null ? hoveredValue : value);

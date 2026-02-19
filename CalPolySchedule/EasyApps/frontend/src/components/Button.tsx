@@ -1,9 +1,9 @@
 
-const Button = ({label}) => {
+const Button = ({ label }: { label: string }) => {
   return(
 
   <button className="
-            w-full mt-6 px-6 py-4 
+            w-full mt-6 px-6 py-4
             bg-gradient-to-r from-lime-500 to-yellow-500
             hover:from-lime-400 hover:to-yellow-400
             text-emerald-950 font-semibold text-lg
@@ -20,4 +20,3 @@ const Button = ({label}) => {
 
 
 export default Button
-          
