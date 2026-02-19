@@ -37,3 +37,5 @@ env/
 .idea/
 *.suo
 *.sw?
+
+node_modules/
