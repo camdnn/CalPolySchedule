@@ -216,8 +216,8 @@ function CompareDrawer({
         </button>
       </div>
 
-      {/* Side-by-side */}
-      <div className="flex flex-1 overflow-hidden divide-x divide-gray-100">
+      {/* Side-by-side on desktop, stacked on mobile */}
+      <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden divide-y md:divide-y-0 md:divide-x divide-gray-100">
         {([{ sched: scheduleA, cm: cmA, idx: idxA }, { sched: scheduleB, cm: cmB, idx: idxB }] as const).map(
           ({ sched, cm, idx }) => (
             <div key={idx} className="flex-1 flex flex-col overflow-y-auto p-4">
@@ -422,7 +422,7 @@ export default function GeneratedSchedulesPanel({
             }`}
           >
             {/* Card header */}
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+            <div className="px-4 md:px-6 py-4 border-b border-gray-100 flex items-center gap-3">
               {/* Compare checkbox */}
               {compareMode && (
                 <input
@@ -468,7 +468,7 @@ export default function GeneratedSchedulesPanel({
             </div>
 
             {/* Course color legend */}
-            <div className="px-6 pt-4 flex flex-wrap gap-2">
+            <div className="px-4 md:px-6 pt-4 flex flex-wrap gap-2">
               {courseKeys.map((k) => (
                 <span key={k} className={`text-xs text-white font-semibold px-2.5 py-1 rounded-md ${cm.get(k)}`}>
                   {k}
@@ -477,7 +477,7 @@ export default function GeneratedSchedulesPanel({
             </div>
 
             {/* Compact section list */}
-            <div className="px-6 pt-3 pb-1 flex flex-col gap-1.5">
+            <div className="px-4 md:px-6 pt-3 pb-1 flex flex-col gap-2">
               {sched.sections.map((s) => {
                 const r     = s.overall_rating !== null ? Number(s.overall_rating) : null;
                 const dot   = cm.get(`${s.subject} ${s.catalog_nbr}`) ?? "bg-gray-400";
@@ -485,13 +485,13 @@ export default function GeneratedSchedulesPanel({
                 return (
                   <div
                     key={`${s.class_nbr}-${s.class_section}`}
-                    className="flex items-center gap-2 text-sm"
+                    className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm"
                   >
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
-                    <span className="font-medium text-gray-800 w-20 flex-shrink-0">
+                    <span className="font-medium text-gray-800 flex-shrink-0">
                       {s.subject} {s.catalog_nbr}
                     </span>
-                    <span className="text-gray-400 text-xs w-14 flex-shrink-0">
+                    <span className="text-gray-400 text-xs flex-shrink-0">
                       {s.component} §{s.class_section}
                     </span>
                     <span className="text-gray-600 text-xs">
@@ -503,7 +503,7 @@ export default function GeneratedSchedulesPanel({
                       )}
                     </span>
                     {s.instructor_name && (
-                      <span className="text-gray-400 text-xs ml-auto flex items-center gap-1.5">
+                      <span className="text-gray-400 text-xs flex items-center gap-1.5 w-full md:w-auto md:ml-auto">
                         {s.instructor_name}
                         {r !== null && (
                           <span className={`font-semibold ${ratingColor(r)}`}>
@@ -511,7 +511,6 @@ export default function GeneratedSchedulesPanel({
                             {s.num_evals ? <span className="text-gray-300 font-normal"> ({s.num_evals})</span> : null}
                           </span>
                         )}
-                        {/* Lock from within a generated schedule */}
                         <button
                           onClick={() => onLock(s)}
                           title={isLocked ? "Unlock" : "Lock this section"}
@@ -531,8 +530,10 @@ export default function GeneratedSchedulesPanel({
             </div>
 
             {/* Week grid */}
-            <div className="px-6 pb-5 mt-3">
-              <WeekGrid sections={sched.sections} colorMap={cm} />
+            <div className="px-4 md:px-6 pb-5 mt-3 overflow-x-auto">
+              <div style={{ minWidth: 260 }}>
+                <WeekGrid sections={sched.sections} colorMap={cm} />
+              </div>
             </div>
           </div>
         );

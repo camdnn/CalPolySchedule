@@ -271,7 +271,7 @@ export default function Dashboard() {
   const defaultSort  = daysMode === "minimize" ? "fewest-days" as const : "rating" as const;
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-white flex flex-col overflow-x-hidden">
 
       {/* ── Mobile header ────────────────────────────────────────────── */}
       <header className="md:hidden flex items-center gap-3 px-4 h-14 bg-white border-b border-gray-200 sticky top-0 z-30 flex-shrink-0">
