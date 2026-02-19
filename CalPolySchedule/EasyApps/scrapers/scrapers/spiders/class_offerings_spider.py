@@ -60,19 +60,9 @@ class ClassOfferingsSpider(scrapy.Spider):
 
     # ── Start at the homepage ──────────────────────────────────
     def start_requests(self):
-        self._seen_term_pages = set()
-        start_url = self.BASE_URL + "index_curr.htm"
-        self._seen_term_pages.add(start_url)
-        yield scrapy.Request(url=start_url, callback=self.parse_homepage)
+        yield scrapy.Request(url=self.BASE_URL + "index_curr.htm", callback=self.parse_homepage)
 
     def parse_homepage(self, response):
-        # Discover additional term pages so one run attempts every reachable term.
-        for href in response.css("a[href*='index_'][href$='.htm']::attr(href)").getall():
-            term_url = response.urljoin(href)
-            if term_url.startswith(self.BASE_URL) and term_url not in self._seen_term_pages:
-                self._seen_term_pages.add(term_url)
-                yield scrapy.Request(url=term_url, callback=self.parse_homepage)
-
         # Term code lives in <span class="term">2262 </span>
         term_code = response.css("span.term::text").get("").strip()
 
