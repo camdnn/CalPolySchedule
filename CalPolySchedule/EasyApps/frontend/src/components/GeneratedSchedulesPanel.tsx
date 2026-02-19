@@ -31,22 +31,26 @@ const SORT_OPTIONS: { key: SortMode; label: string }[] = [
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+// Convert "HH:MM:SS" to absolute minutes (used for vertical placement in grid).
 function toMin(t: string): number {
   const [h, m] = t.split(":").map(Number);
   return h * 60 + m;
 }
 
+// Format API time for user-facing labels.
 function formatTime(t: string | null): string {
   if (!t) return "TBD";
   const [h, m] = t.split(":").map(Number);
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 
+// Translate compact day codes from API (`MWF`) into readable labels.
 function formatDays(d: string | null): string {
   if (!d) return "TBD";
   return d.split("").map((ch) => DAY_LABEL[ch] ?? ch).join(" · ");
 }
 
+// Shared color system for ratings (used in list text).
 function ratingColor(r: number | null): string {
   if (r === null) return "text-gray-400";
   if (r >= 4.0) return "text-green-600";
@@ -54,6 +58,7 @@ function ratingColor(r: number | null): string {
   return "text-red-500";
 }
 
+// Shared badge style system for avg-rating pills.
 function ratingBadge(r: number | null): string {
   if (r === null) return "bg-gray-50 text-gray-400 border border-gray-200";
   if (r >= 4.0) return "bg-green-50 text-green-700 border border-green-200";
@@ -61,6 +66,7 @@ function ratingBadge(r: number | null): string {
   return "bg-red-50 text-red-600 border border-red-200";
 }
 
+// Schedule-level metrics used for sorting controls.
 function getEarliestStart(s: GeneratedSchedule): string {
   return s.sections.reduce((min, sec) =>
     sec.start_time && (!min || sec.start_time < min) ? sec.start_time : min, "");
@@ -71,6 +77,8 @@ function getLatestEnd(s: GeneratedSchedule): string {
     sec.end_time && (!max || sec.end_time > max) ? sec.end_time : max, "");
 }
 
+// Non-mutating sort helper; we always copy before sorting so caller data
+// remains untouched and React state remains predictable.
 function sortSchedules(list: GeneratedSchedule[], mode: SortMode): GeneratedSchedule[] {
   const copy = [...list];
   switch (mode) {
@@ -96,6 +104,7 @@ function sortSchedules(list: GeneratedSchedule[], mode: SortMode): GeneratedSche
   }
 }
 
+// Assign stable colors by course key so all schedule cards/grid blocks match.
 function courseColorMap(sections: ScheduleRowProps[]): Map<string, string> {
   const keys = [...new Set(sections.map((s) => `${s.subject} ${s.catalog_nbr}`))];
   return new Map(keys.map((k, i) => [k, COURSE_COLORS[i % COURSE_COLORS.length]]));
@@ -155,6 +164,8 @@ function WeekGrid({
             {sections
               .filter((s) => s.days?.includes(day) && s.start_time && s.end_time)
               .map((s) => {
+                // Convert real clock times into percentages of display window
+                // so each block can be absolutely positioned in the column.
                 const startMin  = toMin(s.start_time!) - GRID_START * 60;
                 const endMin    = toMin(s.end_time!)   - GRID_START * 60;
                 const topPct    = Math.max(0, (startMin / TOTAL_MIN) * 100);
@@ -198,6 +209,7 @@ function CompareDrawer({
   idxB: number;
   onClose: () => void;
 }) {
+  // Each schedule gets its own course->color map.
   const cmA = courseColorMap(scheduleA.sections);
   const cmB = courseColorMap(scheduleB.sections);
 
@@ -294,11 +306,15 @@ export default function GeneratedSchedulesPanel({
   onLock,
   lockedClassNbrs,
 }: GeneratedSchedulesPanelProps) {
+  // `sortMode`: active ordering strategy for cards.
+  // `compareMode`: whether checkboxes + drawer flow is active.
+  // `compareSelected`: schedule indexes currently selected for comparison.
   const [sortMode, setSortMode]         = useState<SortMode>(defaultSort);
   const [compareMode, setCompareMode]   = useState(false);
   const [compareSelected, setCompare]   = useState<number[]>([]); // indices into sorted list
 
   // Reset compare + sort when new schedules arrive
+  // This prevents stale compare selections referencing old result sets.
   const prevSchedulesRef = useRef(schedules);
   useEffect(() => {
     if (prevSchedulesRef.current !== schedules) {
@@ -338,6 +354,7 @@ export default function GeneratedSchedulesPanel({
 
   const sorted = sortSchedules(schedules, sortMode);
 
+  // Keep a rolling selection of at most 2 schedules.
   function toggleCompare(idx: number) {
     setCompare((prev) => {
       if (prev.includes(idx)) return prev.filter((i) => i !== idx);
@@ -387,6 +404,7 @@ export default function GeneratedSchedulesPanel({
           </div>
 
           {/* Compare toggle */}
+          {/* Turning compare off also clears selected schedule indexes. */}
           <button
             onClick={() => { setCompareMode((m) => !m); setCompare([]); }}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
@@ -477,6 +495,8 @@ export default function GeneratedSchedulesPanel({
             </div>
 
             {/* Compact section list */}
+            {/* This is a quick textual summary; the week grid below gives
+                the true collision/shape visualization. */}
             <div className="px-4 md:px-6 pt-3 pb-1 flex flex-col gap-2">
               {sched.sections.map((s) => {
                 const r     = s.overall_rating !== null ? Number(s.overall_rating) : null;
@@ -512,6 +532,7 @@ export default function GeneratedSchedulesPanel({
                           </span>
                         )}
                         <button
+                          // Lock/unlock section globally (parent owns the state).
                           onClick={() => onLock(s)}
                           title={isLocked ? "Unlock" : "Lock this section"}
                           className={`text-[10px] px-1.5 py-0.5 rounded-full border cursor-pointer transition-colors ${

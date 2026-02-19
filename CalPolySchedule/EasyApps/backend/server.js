@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const scheduleRoutes = require("./routes/schedule");
 
+// Bootstrap express app and bind to configurable port.
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -14,6 +15,7 @@ app.use(cors());
 app.use(express.json());
 
 // ── Health check (used by UptimeRobot to prevent Render spin-down) ─
+// Lightweight endpoint: no DB call, just process liveness.
 app.get("/health", (_req, res) => res.sendStatus(200));
 
 // ── Routes ────────────────────────────────────────────────────────
@@ -21,6 +23,7 @@ app.get("/health", (_req, res) => res.sendStatus(200));
 app.use("/api", scheduleRoutes);
 
 // ── Start ─────────────────────────────────────────────────────────
+// Start HTTP server once all middleware/routes are mounted.
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
 });

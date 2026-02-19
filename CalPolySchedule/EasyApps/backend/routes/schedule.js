@@ -4,6 +4,7 @@ const { pool } = require("../db/index");
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+// "HH:MM:SS" -> minutes from midnight for easy arithmetic comparisons.
 function timeToMin(t) {
   if (!t) return 0;
   const [h, m] = t.split(":").map(Number);
@@ -12,7 +13,9 @@ function timeToMin(t) {
 
 // Compute metadata for a set of sections (used in /generate response)
 function calcMeta(sections) {
+  // Tracks unique campus days represented by this schedule.
   const days = new Set();
+  // Bucket classes by day so we can compute intra-day gaps.
   const byDay = {};
   for (const s of sections) {
     if (!s.days || !s.start_time || !s.end_time) continue;
@@ -23,6 +26,7 @@ function calcMeta(sections) {
     }
   }
   let totalGap = 0;
+  // For each day, sort sections by start and sum positive gaps only.
   for (const daySections of Object.values(byDay)) {
     daySections.sort((a, b) => a.start - b.start);
     for (let i = 1; i < daySections.length; i++) {
@@ -35,6 +39,8 @@ function calcMeta(sections) {
 
 // Parse JSON-encoded blocked time slots from query param
 function parseBlockedSlots(raw) {
+  // UI sends blocked slots as JSON in a query-string field.
+  // Invalid payloads should not crash the endpoint.
   if (!raw) return [];
   try { return JSON.parse(raw); } catch { return []; }
 }
@@ -44,7 +50,9 @@ function sectionIsBlocked(row, blockedSlots) {
   if (!row.days || !row.start_time || !row.end_time) return false;
   const rowStart = timeToMin(row.start_time);
   const rowEnd   = timeToMin(row.end_time);
+  // e.g. "MWF" -> Set("M","W","F") for overlap checks.
   const rowDays  = new Set(row.days.split(""));
+  // Interval overlap rule: A starts before B ends && B starts before A ends.
   return blockedSlots.some(
     (slot) => rowDays.has(slot.day) && rowStart < slot.endMin && slot.startMin < rowEnd
   );
@@ -52,11 +60,13 @@ function sectionIsBlocked(row, blockedSlots) {
 
 // Build WHERE conditions + params array (shared by /schedule and /generate)
 function buildConditions(term, courses, startTime, endTime, days) {
+  // "CSC 101,MATH 142" -> [{subject:"CSC", catalog_nbr:"101"}, ...]
   const courseList = courses.split(",").map((c) => {
     const parts = c.trim().split(" ");
     return { subject: parts[0], catalog_nbr: parts[1] };
   });
 
+  // Parameterized SQL pieces prevent injection and simplify dynamic filters.
   const conditions  = ["t.term_code = $1"];
   const params      = [term];
   let   paramIndex  = 2;
@@ -80,6 +90,7 @@ function buildConditions(term, courses, startTime, endTime, days) {
     paramIndex++;
   }
   if (days) {
+    // Converts "M,W,F" into regex `^[MWF]+$` so all meeting days must be in set.
     const allowedDays = days.split(",").join("");
     conditions.push(`o.days ~ $${paramIndex}`);
     params.push(`^[${allowedDays}]+$`);
@@ -105,6 +116,9 @@ const SELECT_COLS = `
   pr.num_evals
 `;
 
+// Shared join for both endpoints:
+// - terms join scopes offerings by term code
+// - professor_ratings left join enriches with rating data when name match exists
 const FROM_JOIN = `
   FROM class_offerings o
   JOIN  terms t ON t.id = o.term_id
@@ -123,9 +137,12 @@ function sectionsConflict(a, b) {
 
 // Backtracking combination builder — stops at `limit` results
 function buildSchedules(groups, idx, current, results, limit) {
+  // Guardrail: prevents combinatorial explosion from large course sets.
   if (results.length >= limit) return;
+  // Base case: one choice picked from each group => complete schedule.
   if (idx === groups.length) { results.push([...current]); return; }
   for (const section of groups[idx]) {
+    // Add this candidate only if it doesn't overlap existing picks.
     if (!current.some((s) => sectionsConflict(s, section))) {
       current.push(section);
       buildSchedules(groups, idx + 1, current, results, limit);
@@ -139,6 +156,7 @@ function buildSchedules(groups, idx, current, results, limit) {
 
 router.get("/terms", async (req, res) => {
   try {
+    // Active terms are curated by scraper updates in the DB.
     const result = await pool.query(
       `SELECT term_code, term_name FROM terms WHERE is_active = true ORDER BY term_code DESC`
     );
@@ -156,6 +174,7 @@ router.get("/terms", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────
 router.get("/schedule", async (req, res) => {
   try {
+    // Query-string API inputs from frontend filters.
     const { term, courses, minRating, startTime, endTime, days, blockedTimes } = req.query;
     if (!term || !courses) return res.status(400).json({ error: "term and courses are required" });
     if (startTime && endTime && startTime > endTime) {
@@ -169,14 +188,17 @@ router.get("/schedule", async (req, res) => {
       WHERE ${conditions.join("\n        AND ")}
       ORDER BY o.subject, o.catalog_nbr, o.class_section;
     `;
+    // DB returns all matching rows first; remaining filters are easy to apply in JS.
     const result = await pool.query(SQL, params);
     let rows = result.rows;
 
+    // Keep unrated sections (null) so users are not over-filtered.
     if (minRating) {
       const min = parseFloat(minRating);
       rows = rows.filter((r) => r.overall_rating === null || Number(r.overall_rating) >= min);
     }
 
+    // Remove rows that overlap user-blocked windows.
     const blocked = parseBlockedSlots(blockedTimes);
     if (blocked.length > 0) {
       rows = rows.filter((r) => !sectionIsBlocked(r, blocked));
@@ -210,6 +232,7 @@ router.get("/generate", async (req, res) => {
       WHERE ${conditions.join("\n        AND ")}
       ORDER BY o.subject, o.catalog_nbr, o.component, o.class_section;
     `;
+    // This fetch is the candidate pool for combinatorial schedule generation.
     const result = await pool.query(SQL, params);
     let rows = result.rows;
 
@@ -226,6 +249,7 @@ router.get("/generate", async (req, res) => {
     }
 
     // Separate locked sections (fixed slots) from unlocked (to be permuted)
+    // Locked sections are user-pinned and must appear in every generated result.
     const lockedNbrs = new Set(
       (lockedClassNbrs || "").split(",").filter(Boolean).map(Number)
     );
@@ -238,6 +262,7 @@ router.get("/generate", async (req, res) => {
     );
 
     // Group remaining sections by (subject, catalog_nbr, component)
+    // Each group represents "choose one section for this course component".
     const groupMap = new Map();
     for (const row of unlockedRows) {
       const key = `${row.subject}|${row.catalog_nbr}|${row.component}`;
@@ -250,10 +275,12 @@ router.get("/generate", async (req, res) => {
     if (groups.length === 0 && lockedRows.length === 0) return res.json([]);
 
     // Backtracking: seed `current` with locked sections
+    // Limit is intentionally capped to keep response times predictable.
     const raw = [];
     buildSchedules(groups, 0, [...lockedRows], raw, 100);
 
     // Score and attach metadata
+    // avgRating is null if no section in the schedule has rating data.
     const scored = raw.map((sections) => {
       const ratings = sections
         .map((s) => s.overall_rating)
@@ -274,6 +301,7 @@ router.get("/generate", async (req, res) => {
       return b.avgRating - a.avgRating;
     });
 
+    // Return top N to keep payload/UI manageable.
     res.json(scored.slice(0, 15));
   } catch (err) {
     console.error("Error generating schedules:", err);

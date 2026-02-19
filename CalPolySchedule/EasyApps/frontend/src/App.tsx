@@ -4,6 +4,8 @@ import Loading from "./components/Loading.tsx";
 import Dashboard from "./components/CalendarCreation.tsx";
 
 export default function App() {
+  // `isLoggedIn`: user has submitted the login form.
+  // `isLoading`: short transition state while we show the branded loading screen.
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -20,6 +22,8 @@ export default function App() {
   return (
     <div className="min-h-screen bg-white">
       {/* ── Auth screens ──────────────────────────────────────────────── */}
+      {/* LoginForm is always mounted here until dashboard is ready.
+          Loading overlays only after login is triggered. */}
       {!showDashboard && (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-8">
           <LoginForm isLoggedIn={isLoggedIn} setIsLoggedIn={handleLogin} />
@@ -30,6 +34,7 @@ export default function App() {
       )}
 
       {/* ── Dashboard ─────────────────────────────────────────────────── */}
+      {/* Main app shell renders only when auth transition is complete. */}
       {showDashboard && <Dashboard />}
     </div>
   );

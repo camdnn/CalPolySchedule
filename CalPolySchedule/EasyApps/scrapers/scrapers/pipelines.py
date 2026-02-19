@@ -8,7 +8,7 @@ from pathlib import Path
 import psycopg
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 POLYRATINGS_URL = "https://api-prod.polyratings.org/professors.all"
 
@@ -123,25 +123,26 @@ class PolyRatingsPostgresPipeline:
 
 class ClassOfferingsPostgresPipeline:
     """
-    Receives items from ClassOfferingsSpider and UPSERTs them into
-    the class_offerings table.  Auto-creates the term row if needed.
+    Collects all scraped items in memory, then bulk-replaces each term's
+    class_offerings in a single transaction at close_spider.
+
+    This is much faster than per-row inserts (one DB round-trip instead of
+    ~5,000) and is safer: if the spider crashes mid-scrape, the old data
+    remains untouched because nothing is written until close_spider.
     """
 
     def open_spider(self, spider):
         self.conn = psycopg.connect(os.environ["DATABASE_URL"])
         self.cur = self.conn.cursor()
-        self._term_id_cache = {}    # term_code → term_id
-        self._cleared_terms = set() # term_ids already wiped this run
-        self._saw_new_term = False
+        self._items = []          # all yielded items, collected in memory
+        self._term_meta = {}      # term_code → first item seen (carries metadata)
 
     # ── term helper ────────────────────────────────────────────────────
 
     def _get_or_create_term(self, item):
+        """Upsert the term row and return (term_id, is_new)."""
         term_code = item["term"]
-        if term_code in self._term_id_cache:
-            return self._term_id_cache[term_code]
 
-        # parse start / end dates from e.g. "January 5, 2026 to March 13, 2026"
         term_start = None
         term_end = None
         term_date_text = item.get("term_date_text", "")
@@ -149,11 +150,10 @@ class ClassOfferingsPostgresPipeline:
             try:
                 parts = term_date_text.split(" to ")
                 term_start = datetime.strptime(parts[0].strip(), "%B %d, %Y").date()
-                term_end = datetime.strptime(parts[1].strip(), "%B %d, %Y").date()
+                term_end   = datetime.strptime(parts[1].strip(), "%B %d, %Y").date()
             except (ValueError, IndexError):
                 pass
 
-        # derive academic_year: Fall → same year, else year-1
         term_name = item.get("term_name", "")
         academic_year = 2025  # fallback
         year_match = re.search(r"(\d{4})", term_name)
@@ -174,80 +174,103 @@ class ClassOfferingsPostgresPipeline:
                      academic_year, is_active, last_scraped)
                 VALUES (%s, %s, %s, %s, %s, true, NOW())
                 ON CONFLICT (term_code) DO UPDATE SET
-                    term_name   = EXCLUDED.term_name,
-                    term_start  = EXCLUDED.term_start,
-                    term_end    = EXCLUDED.term_end,
-                    is_active   = true,
+                    term_name    = EXCLUDED.term_name,
+                    term_start   = EXCLUDED.term_start,
+                    term_end     = EXCLUDED.term_end,
+                    is_active    = true,
                     last_scraped = NOW()
                 RETURNING id;
             """, (term_code, term_name, term_start, term_end, academic_year))
             row = self.cur.fetchone()
 
         term_id = row[0]
-        if existing_row is None:
-            self._saw_new_term = True
-        self._term_id_cache[term_code] = term_id
+        is_new  = existing_row is None
+        return term_id, is_new
 
-        # First time we see this term in the run: delete all existing offerings
-        # so stale / null-value rows from previous scrapes don't linger.
-        if term_id not in self._cleared_terms:
+    # ── collect only — no DB writes here ───────────────────────────────
+
+    def process_item(self, item, spider):
+        term_code = item["term"]
+        if term_code not in self._term_meta:
+            self._term_meta[term_code] = dict(item)
+        self._items.append(dict(item))
+        return item
+
+    # ── bulk write at the end ───────────────────────────────────────────
+
+    def close_spider(self, spider):
+        if not self._items:
+            self.cur.close()
+            self.conn.close()
+            return
+
+        # Group items by term so we can replace each term atomically.
+        from collections import defaultdict
+        by_term: dict[str, list] = defaultdict(list)
+        for item in self._items:
+            by_term[item["term"]].append(item)
+
+        INSERT = """
+            INSERT INTO class_offerings (
+                term_id, class_nbr, subject, catalog_nbr, class_section,
+                component, descr, days, start_time, end_time,
+                facility_descr, instructor_name,
+                enrollment_available, last_scraped
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
+                    %s::time, %s::time,
+                    %s, %s, %s, NOW())
+            ON CONFLICT (term_id, class_nbr, days, start_time, end_time, facility_descr)
+            DO UPDATE SET
+                subject              = EXCLUDED.subject,
+                catalog_nbr          = EXCLUDED.catalog_nbr,
+                class_section        = EXCLUDED.class_section,
+                component            = EXCLUDED.component,
+                descr                = EXCLUDED.descr,
+                instructor_name      = EXCLUDED.instructor_name,
+                enrollment_available = EXCLUDED.enrollment_available,
+                last_scraped         = NOW();
+        """
+
+        saw_new_term = False
+
+        for term_code, items in by_term.items():
+            term_id, is_new = self._get_or_create_term(self._term_meta[term_code])
+            if is_new:
+                saw_new_term = True
+
+            rows = [
+                (
+                    term_id,
+                    item["class_nbr"],
+                    item["subject"],
+                    item["catalog_nbr"],
+                    item["class_section"],
+                    item["component"],
+                    item.get("descr"),
+                    item.get("days"),
+                    item.get("start_time"),
+                    item.get("end_time"),
+                    item.get("facility_descr"),
+                    item.get("instructor_name"),
+                    item.get("enrollment_available"),
+                )
+                for item in items
+            ]
+
+            # Single transaction per term: delete stale rows then bulk insert.
             with self.conn.transaction():
                 self.cur.execute(
                     "DELETE FROM class_offerings WHERE term_id = %s;",
                     (term_id,),
                 )
-            self._cleared_terms.add(term_id)
+                self.cur.executemany(INSERT, rows)
 
-        return term_id
+            spider.logger.info(
+                "Term %s: wrote %d class offerings.", term_code, len(rows)
+            )
 
-    # ── main insert ────────────────────────────────────────────────────
-
-    def process_item(self, item, spider):
-        term_id = self._get_or_create_term(item)
-
-        UPSERT = """
-        INSERT INTO class_offerings (
-            term_id, class_nbr, subject, catalog_nbr, class_section,
-            component, descr, days, start_time, end_time,
-            facility_descr, instructor_name,
-            enrollment_available, last_scraped
-        )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
-                %s::time, %s::time,
-                %s, %s, %s, NOW())
-        ON CONFLICT (term_id, class_nbr, days, start_time, end_time, facility_descr)
-        DO UPDATE SET
-            subject              = EXCLUDED.subject,
-            catalog_nbr          = EXCLUDED.catalog_nbr,
-            class_section        = EXCLUDED.class_section,
-            component            = EXCLUDED.component,
-            descr                = EXCLUDED.descr,
-            instructor_name      = EXCLUDED.instructor_name,
-            enrollment_available = EXCLUDED.enrollment_available,
-            last_scraped         = NOW();
-        """
-
-        with self.conn.transaction():
-            self.cur.execute(UPSERT, (
-                term_id,
-                item["class_nbr"],
-                item["subject"],
-                item["catalog_nbr"],
-                item["class_section"],
-                item["component"],
-                item.get("descr"),
-                item.get("days"),
-                item.get("start_time"),   # "HH:MM:SS" 24-hour from _parse_time
-                item.get("end_time"),
-                item.get("facility_descr"),
-                item.get("instructor_name"),
-                item.get("enrollment_available"),
-            ))
-
-        return item
-
-    def close_spider(self, spider):
-        if self._saw_new_term:
+        if saw_new_term:
             try:
                 professors = _fetch_polyratings_professors()
                 _apply_professor_snapshot(self.conn, self.cur, professors)

@@ -39,9 +39,13 @@ function componentBadge(comp: string): string {
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface ClassResultsPanelProps {
+  // Flat section list returned from /api/schedule
   results: ScheduleRowProps[];
+  // Used to differentiate "empty because not searched yet" vs "empty results"
   hasSearched: boolean;
+  // Section ids currently pinned by user
   lockedClassNbrs: Set<string>;
+  // Toggle pin action delegated to parent state
   onLock: (section: ScheduleRowProps) => void;
 }
 
@@ -52,6 +56,7 @@ export default function ClassResultsPanel({
   lockedClassNbrs,
   onLock,
 }: ClassResultsPanelProps) {
+  // Initial onboarding state before first query.
   if (!hasSearched) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
@@ -78,6 +83,7 @@ export default function ClassResultsPanel({
   }
 
   // Group by "SUBJ CATALOG_NBR"
+  // This lets us render one course card with multiple section rows inside it.
   const grouped = results.reduce<Record<string, ScheduleRowProps[]>>((acc, row) => {
     const key = `${row.subject} ${row.catalog_nbr}`;
     if (!acc[key]) acc[key] = [];
@@ -127,6 +133,7 @@ export default function ClassResultsPanel({
             </div>
 
             {/* Sections sorted best rating first, unrated last */}
+            {/* We convert null ratings to -1 so unrated sections sink to the bottom. */}
             <div className="divide-y divide-gray-100">
               {[...sections]
                 .sort((a, b) => {
@@ -159,6 +166,8 @@ export default function ClassResultsPanel({
                         )}
 
                         {/* Lock button — hidden until hover (or always visible if locked) */}
+                        {/* This calls parent handler so lock state is shared across
+                            both section and generated-schedule views. */}
                         <button
                           onClick={() => onLock(section)}
                           title={isLocked ? "Unlock this section" : "Lock and regenerate around this section"}
@@ -175,6 +184,7 @@ export default function ClassResultsPanel({
                         </button>
 
                         {/* Seats — pushed right, accessible with text + dot */}
+                        {/* Dot color and text both encode seat status for clarity. */}
                         <div className="ml-auto flex items-center gap-1.5 text-xs">
                           <span
                             className={`w-1.5 h-1.5 rounded-full inline-block flex-shrink-0 ${
@@ -209,6 +219,8 @@ export default function ClassResultsPanel({
                         <span className="text-gray-400 text-xs">§{section.class_section}</span>
 
                         {/* Instructor + rating + eval count */}
+                        {/* Rating is optional; we keep "no rating" explicit so users
+                            can distinguish unrated from low-rated instructors. */}
                         <span className="text-gray-700 text-sm">
                           👤 {section.instructor_name ?? "Staff"}
                         </span>

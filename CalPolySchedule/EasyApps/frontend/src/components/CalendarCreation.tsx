@@ -13,11 +13,13 @@ import GeneratedSchedulesPanel from "./GeneratedSchedulesPanel.tsx";
 import WeekBlockGrid from "./WeekBlockGrid.tsx";
 
 // ── Constants / helpers ───────────────────────────────────────────────────────
+// Maps UI day labels to backend single-letter day codes.
 const DAY_TO_CODE: Record<string, string> = {
   Monday: "M", Tuesday: "T", Wednesday: "W", Thursday: "R", Friday: "F",
 };
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
+// Single source of truth for initial filter values and reset behavior.
 const DEFAULTS = {
   minRating:      3.5,
   timeStart:      "08:00",
@@ -50,8 +52,10 @@ interface Chip { label: string; onRemove: () => void }
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   // ── Term + courses ───────────────────────────────────────────────────────
+  // `terms` loaded from backend; `selectedTerm` drives every schedule query.
   const [terms, setTerms]           = useState<Term[]>([]);
   const [selectedTerm, setSelectedTerm] = useState<Term | null>(null);
+  // User-requested courses, plus active input textbox value.
   const [courses, setCourses]       = useState<CourseProps[]>([]);
   const [currentCourse, setCurrentCourse] = useState("");
 
@@ -71,19 +75,23 @@ export default function Dashboard() {
   const [lockedSections, setLockedSections] = useState<LockedSection[]>([]);
 
   // ── Results state ────────────────────────────────────────────────────────
+  // Flat section results from /api/schedule.
   const [sections, setSections]             = useState<ScheduleRowProps[]>([]);
   const [hasSearched, setHasSearched]       = useState(false);
   const [isSearching, setIsSearching]       = useState(false);
 
+  // Combination results from /api/generate.
   const [generatedSchedules, setGeneratedSchedules] = useState<GeneratedSchedule[]>([]);
   const [hasGenerated, setHasGenerated]             = useState(false);
   const [isGenerating, setIsGenerating]             = useState(false);
   const [progressCount, setProgressCount]           = useState(0);
 
+  // Controls whether right panel shows section rows or generated combos.
   const [viewMode, setViewMode] = useState<ViewMode>("sections");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Load terms on mount
+  // If backend returns terms sorted newest-first, first item becomes default.
   useEffect(() => {
     fetchJson<ApiTermRowProps[]>("/api/terms")
       .then((rows) => {
@@ -98,6 +106,7 @@ export default function Dashboard() {
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (isGenerating) {
+      // Fake progress ticker for perceived responsiveness while backend computes.
       setProgressCount(0);
       progressRef.current = setInterval(() => {
         setProgressCount((p) => p + Math.floor(Math.random() * 45 + 15));
@@ -109,6 +118,8 @@ export default function Dashboard() {
   }, [isGenerating]);
 
   // ── Shared URL params ────────────────────────────────────────────────────
+  // Centralized query builder so /schedule and /generate stay in sync.
+  // Non-empty optional filters are conditionally appended.
   const buildParams = useCallback((): URLSearchParams => {
     const params = new URLSearchParams({
       term:      selectedTerm!.code,
@@ -131,6 +142,7 @@ export default function Dashboard() {
   }, [selectedTerm, courses, minRating, timeStart, timeEnd, preferredDays, blockedSlots, lockedSections]);
 
   // ── Find Sections ─────────────────────────────────────────────────────────
+  // Fetches raw section rows with current filters.
   const handleFindSections = async () => {
     if (!selectedTerm || courses.length === 0) return;
     setSidebarOpen(false); // auto-close drawer on mobile
@@ -148,6 +160,7 @@ export default function Dashboard() {
   };
 
   // ── Generate Schedules ────────────────────────────────────────────────────
+  // Fetches conflict-free schedule combinations computed server-side.
   const handleGenerateSchedules = async () => {
     if (!selectedTerm || courses.length === 0) return;
     setSidebarOpen(false); // auto-close drawer on mobile
@@ -165,6 +178,7 @@ export default function Dashboard() {
   };
 
   // ── Lock / unlock a section ───────────────────────────────────────────────
+  // Locks are identified by class number and fed back into both endpoints.
   const handleLock = useCallback((section: ScheduleRowProps) => {
     const nbr = String(section.class_nbr);
     setLockedSections((prev) => {
@@ -181,8 +195,10 @@ export default function Dashboard() {
   }, []);
 
   const lockedClassNbrs = new Set(lockedSections.map((s) => s.class_nbr));
+  // Set form is optimized for O(1) lookup during render.
 
   // ── Course input helpers ──────────────────────────────────────────────────
+  // Normalizes text and avoids duplicate course entries.
   const addCourse = (raw: string) => {
     const number = raw.toUpperCase().trim();
     if (!number) return;
@@ -199,6 +215,7 @@ export default function Dashboard() {
   };
 
   // Multi-paste: "CSC 101, MATH 142\nCPE 202" → multiple courses
+  // This gives users a fast way to add a full quarter load at once.
   const handleCoursePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData("text");
     if (text.includes(",") || text.includes("\n")) {
@@ -220,6 +237,7 @@ export default function Dashboard() {
     );
 
   // ── Reset filters ─────────────────────────────────────────────────────────
+  // Resets every tunable constraint but keeps selected term/courses.
   const resetFilters = () => {
     setMinRating(DEFAULTS.minRating);
     setTimeStart(DEFAULTS.timeStart);
@@ -232,6 +250,7 @@ export default function Dashboard() {
   };
 
   // ── Active filter chips ───────────────────────────────────────────────────
+  // Chips mirror only non-default filters; each chip owns its clear action.
   const activeChips: Chip[] = [
     minRating !== DEFAULTS.minRating && {
       label: `★ min ${minRating.toFixed(1)}`,
@@ -268,8 +287,10 @@ export default function Dashboard() {
   ].filter(Boolean) as Chip[];
 
   const canSearch    = !!selectedTerm && courses.length > 0;
+  // Slider fill percentages power CSS linear-gradient tracks.
   const sliderPct    = ((minRating - 1) / 4) * 100;
   const gapSliderPct = (gapPreference / 60) * 100;
+  // Default generated-schedule sort follows "days mode" preference.
   const defaultSort  = daysMode === "minimize" ? "fewest-days" as const : "rating" as const;
 
   return (
@@ -295,6 +316,7 @@ export default function Dashboard() {
       <div className="flex flex-1">
 
       {/* ── Sidebar backdrop ─────────────────────────────────────────── */}
+      {/* Mobile-only click target to dismiss the drawer. */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/30 md:hidden"
@@ -460,6 +482,7 @@ export default function Dashboard() {
             </div>
 
             {/* Days on campus mode */}
+            {/* This currently changes default sort behavior client-side. */}
             <label className="sidebar-label">Days on Campus</label>
             <div className="flex rounded-lg overflow-hidden border border-gray-200">
               {(["balanced", "minimize"] as const).map((mode) => (
@@ -518,6 +541,8 @@ export default function Dashboard() {
           <hr className="border-gray-100 my-4" />
 
           {/* ── Action buttons ────────────────────────────────────── */}
+          {/* "Find Sections" and "Generate Schedules" share filters but hit
+              different backend endpoints for different result types. */}
           <div className="flex flex-col gap-2">
             <button
               onClick={handleFindSections}
@@ -601,6 +626,7 @@ export default function Dashboard() {
       {/* ── Main area ────────────────────────────────────────────────── */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto bg-gray-50 min-h-screen">
         {/* Active filter chips */}
+        {/* Quick visibility into active constraints + one-click removal. */}
         {activeChips.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-6">
             {activeChips.map((chip, i) => (
@@ -634,6 +660,7 @@ export default function Dashboard() {
         )}
 
         {/* Section results */}
+        {/* Renders only when not generating and in section view. */}
         {!isGenerating && viewMode === "sections" && (
           <ClassResultsPanel
             results={sections}
@@ -644,6 +671,7 @@ export default function Dashboard() {
         )}
 
         {/* Generated schedule results */}
+        {/* Renders only when not generating and in generated view. */}
         {!isGenerating && viewMode === "schedules" && (
           <GeneratedSchedulesPanel
             schedules={generatedSchedules}

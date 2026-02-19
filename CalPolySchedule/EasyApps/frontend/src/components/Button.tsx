@@ -1,4 +1,6 @@
-
+// Reusable gradient CTA button used across auth/landing surfaces.
+// This component is intentionally "presentational": caller controls
+// click handlers by wrapping or extending it where needed.
 const Button = ({ label }: { label: string }) => {
   return(
 
@@ -13,6 +15,7 @@ const Button = ({ label }: { label: string }) => {
             active:scale-[0.98]
             cursor-pointer
    ">
+    {/* Visible button text provided by parent */}
     {label}
    </button>
   )
