@@ -7,23 +7,30 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // When user logs in, show loading screen
+  // When user submits name: show loading screen, then reveal dashboard
   const handleLogin = () => {
     setIsLoggedIn(true);
     setIsLoading(true);
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-green-900 to-emerald-950 flex items-center justify-center p-6">
-      {/* Login Form */}
-      <LoginForm isLoggedIn={isLoggedIn} setIsLoggedIn={handleLogin} />
+  // Auth screens (login + loading) are centered on a gray-50 background.
+  // Once loading finishes, the full-screen dashboard takes over.
+  const showDashboard = isLoggedIn && !isLoading;
 
-      {/* Loading Screen - shows after login */}
-      {isLoggedIn && (
-        <Loading isLoading={isLoading} setIsLoading={setIsLoading} />
+  return (
+    <div className="min-h-screen bg-white">
+      {/* ── Auth screens ──────────────────────────────────────────────── */}
+      {!showDashboard && (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-8">
+          <LoginForm isLoggedIn={isLoggedIn} setIsLoggedIn={handleLogin} />
+          {isLoggedIn && (
+            <Loading isLoading={isLoading} setIsLoading={setIsLoading} />
+          )}
+        </div>
       )}
 
-      <Dashboard isVisible={!isLoading && isLoggedIn} />
+      {/* ── Dashboard ─────────────────────────────────────────────────── */}
+      {showDashboard && <Dashboard />}
     </div>
   );
 }

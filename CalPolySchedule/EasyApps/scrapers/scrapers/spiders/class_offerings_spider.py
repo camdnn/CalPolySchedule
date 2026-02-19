@@ -1,4 +1,27 @@
 import scrapy
+from datetime import datetime
+
+
+def _parse_time(raw: str | None) -> str | None:
+    """
+    Convert schedule page time strings to "HH:MM:SS" for PostgreSQL TIME.
+
+    The page uses 12-hour AM/PM format and often puts a non-breaking space
+    (\xa0) between the digits and AM/PM, e.g. "12:10\xa0PM" or "08:10 AM".
+    strptime would fail without normalising that first.
+    """
+    if not raw:
+        return None
+    # Replace non-breaking space (\xa0) and strip normal whitespace
+    text = raw.replace("\xa0", " ").strip()
+    if not text:
+        return None
+    for fmt in ("%I:%M %p", "%H:%M", "%I:%M:%S %p", "%H:%M:%S"):
+        try:
+            return datetime.strptime(text, fmt).strftime("%H:%M:%S")
+        except ValueError:
+            continue
+    return None
 
 
 class ClassOfferingsSpider(scrapy.Spider):
@@ -16,7 +39,8 @@ class ClassOfferingsSpider(scrapy.Spider):
 
     BASE_URL = "https://schedules.calpoly.edu/"
 
-    # One subject-listing page per college, plus the catch-all
+    # One subject-listing page per college, plus the catch-all.
+    # Used as fallback if term homepages do not expose the links directly.
     COLLEGE_SUBJECT_PAGES = [
         "all_subject_10-CAGR_curr.htm",  # Ag, Food & Envr Sci
         "all_subject_20-CAED_curr.htm",  # Arch & Envr Design
@@ -36,12 +60,19 @@ class ClassOfferingsSpider(scrapy.Spider):
 
     # ── Start at the homepage ──────────────────────────────────
     def start_requests(self):
-        yield scrapy.Request(
-            url=self.BASE_URL + "index_curr.htm",
-            callback=self.parse_homepage,
-        )
+        self._seen_term_pages = set()
+        start_url = self.BASE_URL + "index_curr.htm"
+        self._seen_term_pages.add(start_url)
+        yield scrapy.Request(url=start_url, callback=self.parse_homepage)
 
     def parse_homepage(self, response):
+        # Discover additional term pages so one run attempts every reachable term.
+        for href in response.css("a[href*='index_'][href$='.htm']::attr(href)").getall():
+            term_url = response.urljoin(href)
+            if term_url.startswith(self.BASE_URL) and term_url not in self._seen_term_pages:
+                self._seen_term_pages.add(term_url)
+                yield scrapy.Request(url=term_url, callback=self.parse_homepage)
+
         # Term code lives in <span class="term">2262 </span>
         term_code = response.css("span.term::text").get("").strip()
 
@@ -69,12 +100,23 @@ class ClassOfferingsSpider(scrapy.Spider):
             "term_date_text": term_date_text,
         }
 
+        # Prefer term-specific subject pages linked on the current term homepage.
+        subject_pages = {
+            href.strip()
+            for href in response.css("a[href^='all_subject_'][href$='.htm']::attr(href)").getall()
+            if href.strip()
+        }
+
+        # Fallback to legacy "_curr" pages if term page does not expose links.
+        if not subject_pages:
+            subject_pages = set(self.COLLEGE_SUBJECT_PAGES)
+
         # ── follow each college's subject-listing page ─────────
-        for page in self.COLLEGE_SUBJECT_PAGES:
+        for page in sorted(subject_pages):
             yield scrapy.Request(
-                url=self.BASE_URL + page,
-                callback=self.parse_college_subjects, # parse the data for each college page
-                meta=meta,                            # keep the term name code and date
+                url=response.urljoin(page),
+                callback=self.parse_college_subjects,
+                meta=meta,
             )
 
     # ── Step 2: Collect subject page links ─────────────────────────────
@@ -89,7 +131,7 @@ class ClassOfferingsSpider(scrapy.Spider):
         """
         for link in response.css("td.subjectCode a"):
             href = link.attrib.get("href", "")
-            if href.startswith("subject_") and href.endswith("_curr.htm"):
+            if href.startswith("subject_") and href.endswith(".htm"):
                 yield scrapy.Request(
                     url=response.urljoin(href),
                     callback=self.parse_subject_page,
@@ -148,19 +190,33 @@ class ClassOfferingsSpider(scrapy.Spider):
             # ── Other fields ──
             class_section = row.css("td.courseSection::text").get("").strip()
             component = row.css("td.courseType span::text").get("").strip()
-            days = row.css("td.courseDays span::text").get("").strip() or None
-            start_time = row.css("td.startTime::text").get("").strip() or None
-            end_time = row.css("td.endTime::text").get("").strip() or None
 
-            # Full instructor name from <a title="Hisham H. Assal">
+            # Days: try inside a <span> first, fall back to direct td text
+            days = (
+                row.css("td.courseDays span::text").get("")
+                or row.css("td.courseDays::text").get("")
+            ).replace("\xa0", " ").strip() or None
+
+            # Times: normalize \xa0 → space then convert to 24-hour HH:MM:SS
+            start_time = _parse_time(row.css("td.startTime::text").get(""))
+            end_time   = _parse_time(row.css("td.endTime::text").get(""))
+
+         
+            # Instructor: prefer <a title="Full Name">, fall back to link text
+            # then bare td text (personName only present on the first row of
+            # each rowspan group; later rows yield None, which is correct)
             instructor_name = (
-                row.css("td.personName a::attr(title)").get("").strip() or None
-            )
+                row.css("td.personName a::attr(title)").get("")
+                or row.css("td.personName a::text").get("")
+                or row.css("td.personName::text").get("")
+            ).strip() or None
 
-            # Full location from <a title="Pilling Building Room 0247">
+            # Location: prefer <a title="Full Room Name">, fall back to text
             facility_descr = (
-                row.css("td.location a::attr(title)").get("").strip() or None
-            )
+                row.css("td.location a::attr(title)").get("")
+                or row.css("td.location a::text").get("")
+                or row.css("td.location::text").get("")
+            ).replace("\xa0", " ").strip() or None
 
             # ── Enrollment availability ──
             # Count cells in order: LCap, ECap, Enrl, Wait, Drop

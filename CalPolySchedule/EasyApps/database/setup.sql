@@ -42,8 +42,6 @@ CREATE TABLE class_offerings (
   component VARCHAR(10) NOT NULL,      -- LEC/LAB/ACT
   descr TEXT,                          -- course title/desc
 
-  instruction_mode_descr VARCHAR(50),
-
   days VARCHAR(20),                    -- "MoWe" etc (from meetings)
   start_time TIME,
   end_time TIME,
@@ -51,7 +49,6 @@ CREATE TABLE class_offerings (
 
   instructor_name VARCHAR(120),
 
-  units DECIMAL(4,2),                  -- safer than INT
   enrollment_available INTEGER,
 
   last_scraped TIMESTAMP NOT NULL DEFAULT NOW(),

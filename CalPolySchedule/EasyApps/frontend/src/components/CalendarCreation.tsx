@@ -1,418 +1,622 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { Term } from "../utils/termHelper.ts";
-import type { ScheduleRowProps, DashboardProps, CourseProps, ApiTermRowProps  } from "../props/CaldendarProps.ts";
+import type {
+  ScheduleRowProps,
+  CourseProps,
+  ApiTermRowProps,
+  GeneratedSchedule,
+  BlockedSlot,
+  LockedSection,
+} from "../props/CaldendarProps.ts";
+import ClassResultsPanel from "./ClassResultsPanel.tsx";
+import GeneratedSchedulesPanel from "./GeneratedSchedulesPanel.tsx";
+import WeekBlockGrid from "./WeekBlockGrid.tsx";
 
-// conversions for weekdays to singe characters
-// (what database expects)
+// ── Constants / helpers ───────────────────────────────────────────────────────
 const DAY_TO_CODE: Record<string, string> = {
-  Monday: "M",
-  Tuesday: "T",
-  Wednesday: "W",
-  Thursday: "R",
-  Friday: "F",
+  Monday: "M", Tuesday: "T", Wednesday: "W", Thursday: "R", Friday: "F",
 };
+const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
+const DEFAULTS = {
+  minRating:      3.5,
+  timeStart:      "08:00",
+  timeEnd:        "17:00",
+  preferredDays:  [] as string[],
+  gapPreference:  0,   // minutes; 0 = no preference / compact
+  daysMode:       "balanced" as "balanced" | "minimize",
+};
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Request failed (${res.status}): ${text || res.statusText}`);
+    throw new Error(`${res.status}: ${text || res.statusText}`);
   }
   return res.json() as Promise<T>;
 }
 
+// "08:30" → "8:30 AM"
+function fmtTime(t: string): string {
+  const [h, m] = t.split(":").map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+}
 
-export default function Dashboard({ isVisible }: DashboardProps) {
+type ViewMode = "sections" | "schedules";
+
+// ── Filter chip helpers ───────────────────────────────────────────────────────
+interface Chip { label: string; onRemove: () => void }
+
+// ── Component ─────────────────────────────────────────────────────────────────
+export default function Dashboard() {
+  // ── Term + courses ───────────────────────────────────────────────────────
+  const [terms, setTerms]           = useState<Term[]>([]);
   const [selectedTerm, setSelectedTerm] = useState<Term | null>(null);
-  const [terms, setTerms] = useState<Term[]>([]);
-  const [courses, setCourses] = useState<CourseProps[]>([]);
+  const [courses, setCourses]       = useState<CourseProps[]>([]);
   const [currentCourse, setCurrentCourse] = useState("");
-  const [minRating, setMinRating] = useState(3.5);
-  const [timeRangeStart, setTimeRangeStart] = useState("08:00");
-  const [timeRangeEnd, setTimeRangeEnd] = useState("17:00");
-  const [preferredDays, setPreferredDays] = useState<string[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
 
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+  // ── Filter sliders / toggles ─────────────────────────────────────────────
+  const [minRating, setMinRating]           = useState(DEFAULTS.minRating);
+  const [timeStart, setTimeStart]           = useState(DEFAULTS.timeStart);
+  const [timeEnd, setTimeEnd]               = useState(DEFAULTS.timeEnd);
+  const [preferredDays, setPreferredDays]   = useState<string[]>(DEFAULTS.preferredDays);
+  const [gapPreference, setGapPreference]   = useState(DEFAULTS.gapPreference);
+  const [daysMode, setDaysMode]             = useState<"balanced" | "minimize">(DEFAULTS.daysMode);
 
+  // ── Block grid ───────────────────────────────────────────────────────────
+  const [blockedSlots, setBlockedSlots]     = useState<BlockedSlot[]>([]);
+  const [showBlockGrid, setShowBlockGrid]   = useState(false);
+
+  // ── Locked sections ──────────────────────────────────────────────────────
+  const [lockedSections, setLockedSections] = useState<LockedSection[]>([]);
+
+  // ── Results state ────────────────────────────────────────────────────────
+  const [sections, setSections]             = useState<ScheduleRowProps[]>([]);
+  const [hasSearched, setHasSearched]       = useState(false);
+  const [isSearching, setIsSearching]       = useState(false);
+
+  const [generatedSchedules, setGeneratedSchedules] = useState<GeneratedSchedule[]>([]);
+  const [hasGenerated, setHasGenerated]             = useState(false);
+  const [isGenerating, setIsGenerating]             = useState(false);
+  const [progressCount, setProgressCount]           = useState(0);
+
+  const [viewMode, setViewMode] = useState<ViewMode>("sections");
+
+  // Load terms on mount
   useEffect(() => {
-    const loadTerms = async () => {
-      try {
-        // Load ONLY terms that exist in DB
-        const rows = await fetchJson<ApiTermRowProps[]>("/api/terms");
-
-        // maps the term code and name in a terms array
-        const mapped: Term[] = rows.map((r) => ({
-          code: r.term_code,
-          display: r.term_name,
-        }));
-
+    fetchJson<ApiTermRowProps[]>("/api/terms")
+      .then((rows) => {
+        const mapped = rows.map((r) => ({ code: r.term_code, display: r.term_name }));
         setTerms(mapped);
         setSelectedTerm(mapped[0] ?? null);
-      } catch (e) {
-        console.error("Failed to load terms:", e);
-        setTerms([]);
-        setSelectedTerm(null);
-      }
-    };
-    loadTerms();
+      })
+      .catch((e) => console.error("Failed to load terms:", e));
   }, []);
 
-  const handleGenerateSchedule = async () => {
+  // ── Progress simulation while generating ─────────────────────────────────
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (isGenerating) {
+      setProgressCount(0);
+      progressRef.current = setInterval(() => {
+        setProgressCount((p) => p + Math.floor(Math.random() * 45 + 15));
+      }, 120);
+    } else {
+      if (progressRef.current) clearInterval(progressRef.current);
+    }
+    return () => { if (progressRef.current) clearInterval(progressRef.current); };
+  }, [isGenerating]);
+
+  // ── Shared URL params ────────────────────────────────────────────────────
+  const buildParams = useCallback((): URLSearchParams => {
+    const params = new URLSearchParams({
+      term:      selectedTerm!.code,
+      courses:   courses.map((c) => c.number).join(","),
+      minRating: String(minRating),
+      startTime: timeStart,
+      endTime:   timeEnd,
+    });
+    if (preferredDays.length > 0) {
+      const codes = preferredDays.map((d) => DAY_TO_CODE[d]).filter(Boolean).join(",");
+      if (codes) params.set("days", codes);
+    }
+    if (blockedSlots.length > 0) {
+      params.set("blockedTimes", JSON.stringify(blockedSlots));
+    }
+    if (lockedSections.length > 0) {
+      params.set("lockedClassNbrs", lockedSections.map((s) => s.class_nbr).join(","));
+    }
+    return params;
+  }, [selectedTerm, courses, minRating, timeStart, timeEnd, preferredDays, blockedSlots, lockedSections]);
+
+  // ── Find Sections ─────────────────────────────────────────────────────────
+  const handleFindSections = async () => {
     if (!selectedTerm || courses.length === 0) return;
-
-    setIsGenerating(true);
-
+    setIsSearching(true);
+    setViewMode("sections");
     try {
-      const coursesParam = courses.map((c) => c.number).join(",");
-
-      const params = new URLSearchParams({
-        term: selectedTerm.code,
-        courses: coursesParam,
-        minRating: String(minRating),
-        startTime: timeRangeStart,
-        endTime: timeRangeEnd,
-      });
-
-      // Only include `days` if user chose some
-      if (preferredDays.length > 0) {
-        const dayCodes = preferredDays
-          .map((d) => DAY_TO_CODE[d])
-          .filter(Boolean)
-          .join(",");
-        if (dayCodes) params.set("days", dayCodes);
-      }
-
-      const url = `/api/schedule?${params.toString()}`;
-
-      const scheduleRows = await fetchJson<ScheduleRowProps[]>(url);
-
-      console.log("Schedule results:", scheduleRows);
-
-      // TODO: store in state + render results
-      // setSchedule(scheduleRows);
+      const rows = await fetchJson<ScheduleRowProps[]>(`/api/schedule?${buildParams()}`);
+      setSections(rows);
+      setHasSearched(true);
     } catch (e) {
-      console.error("Failed to generate schedule:", e);
+      console.error("Find sections failed:", e);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // ── Generate Schedules ────────────────────────────────────────────────────
+  const handleGenerateSchedules = async () => {
+    if (!selectedTerm || courses.length === 0) return;
+    setIsGenerating(true);
+    setViewMode("schedules");
+    try {
+      const scheds = await fetchJson<GeneratedSchedule[]>(`/api/generate?${buildParams()}`);
+      setGeneratedSchedules(scheds);
+      setHasGenerated(true);
+    } catch (e) {
+      console.error("Generate failed:", e);
     } finally {
       setIsGenerating(false);
     }
   };
 
-
-  const addCourse = () => {
-    if (currentCourse.trim()) {
-      setCourses([
-        ...courses,
+  // ── Lock / unlock a section ───────────────────────────────────────────────
+  const handleLock = useCallback((section: ScheduleRowProps) => {
+    const nbr = String(section.class_nbr);
+    setLockedSections((prev) => {
+      const exists = prev.some((s) => s.class_nbr === nbr);
+      if (exists) return prev.filter((s) => s.class_nbr !== nbr); // unlock
+      return [
+        ...prev,
         {
-          id: Date.now().toString(),
-          number: currentCourse.toUpperCase().trim(),
+          class_nbr: nbr,
+          label: `${section.subject} ${section.catalog_nbr} ${section.component} §${section.class_section}`,
         },
-      ]);
+      ];
+    });
+  }, []);
+
+  const lockedClassNbrs = new Set(lockedSections.map((s) => s.class_nbr));
+
+  // ── Course input helpers ──────────────────────────────────────────────────
+  const addCourse = (raw: string) => {
+    const number = raw.toUpperCase().trim();
+    if (!number) return;
+    setCourses((prev) => {
+      const existing = new Set(prev.map((c) => c.number));
+      if (existing.has(number)) return prev;
+      return [...prev, { id: Date.now().toString() + Math.random(), number }];
+    });
+  };
+
+  const handleCourseAdd = () => {
+    addCourse(currentCourse);
+    setCurrentCourse("");
+  };
+
+  // Multi-paste: "CSC 101, MATH 142\nCPE 202" → multiple courses
+  const handleCoursePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData("text");
+    if (text.includes(",") || text.includes("\n")) {
+      e.preventDefault();
+      text
+        .split(/[,\n]+/)
+        .map((t) => t.trim().toUpperCase())
+        .filter((t) => /^[A-Z]+\s+\d+/.test(t))
+        .forEach(addCourse);
       setCurrentCourse("");
     }
   };
 
-  const removeCourse = (id: string) => {
-    setCourses(courses.filter((course) => course.id !== id));
-  };
+  const removeCourse = (id: string) => setCourses((prev) => prev.filter((c) => c.id !== id));
 
-  const toggleDay = (day: string) => {
+  const toggleDay = (day: string) =>
     setPreferredDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
     );
+
+  // ── Reset filters ─────────────────────────────────────────────────────────
+  const resetFilters = () => {
+    setMinRating(DEFAULTS.minRating);
+    setTimeStart(DEFAULTS.timeStart);
+    setTimeEnd(DEFAULTS.timeEnd);
+    setPreferredDays([]);
+    setGapPreference(DEFAULTS.gapPreference);
+    setDaysMode(DEFAULTS.daysMode);
+    setBlockedSlots([]);
+    setLockedSections([]);
   };
 
-  
+  // ── Active filter chips ───────────────────────────────────────────────────
+  const activeChips: Chip[] = [
+    minRating !== DEFAULTS.minRating && {
+      label: `★ min ${minRating.toFixed(1)}`,
+      onRemove: () => setMinRating(DEFAULTS.minRating),
+    },
+    timeStart !== DEFAULTS.timeStart && {
+      label: `from ${fmtTime(timeStart)}`,
+      onRemove: () => setTimeStart(DEFAULTS.timeStart),
+    },
+    timeEnd !== DEFAULTS.timeEnd && {
+      label: `until ${fmtTime(timeEnd)}`,
+      onRemove: () => setTimeEnd(DEFAULTS.timeEnd),
+    },
+    preferredDays.length > 0 && {
+      label: preferredDays.map((d) => d.slice(0, 3)).join(" · "),
+      onRemove: () => setPreferredDays([]),
+    },
+    gapPreference > 0 && {
+      label: `~${gapPreference}min gap`,
+      onRemove: () => setGapPreference(0),
+    },
+    daysMode !== DEFAULTS.daysMode && {
+      label: "Minimize days",
+      onRemove: () => setDaysMode("balanced"),
+    },
+    lockedSections.length > 0 && {
+      label: `${lockedSections.length} locked`,
+      onRemove: () => setLockedSections([]),
+    },
+    blockedSlots.length > 0 && {
+      label: "Times blocked",
+      onRemove: () => setBlockedSlots([]),
+    },
+  ].filter(Boolean) as Chip[];
+
+  const canSearch    = !!selectedTerm && courses.length > 0;
+  const sliderPct    = ((minRating - 1) / 4) * 100;
+  const gapSliderPct = (gapPreference / 60) * 100;
+  const defaultSort  = daysMode === "minimize" ? "fewest-days" as const : "rating" as const;
 
   return (
-    <div
-      className={`
-        w-full max-w-4xl
-        transition-all duration-500 ease-in-out delay-300
-        ${isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95 absolute pointer-events-none"}
-      `}
-    >
-      <div className="bg-emerald-900/20 backdrop-blur-sm p-8 rounded-2xl border border-emerald-700/30 shadow-2xl">
-        <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-lime-400 to-yellow-400 mb-2 text-center">
-          Schedule Builder
-        </h2>
-        <p className="text-lime-300/80 text-center mb-8 text-sm">
-          Powered by PolyRatings data
-        </p>
+    <div className="min-h-screen bg-white flex">
 
-        {/* Term Selection */}
-        <div className="mb-8">
-          <label className="block text-lime-400 font-medium mb-3 text-lg">
-            Select Term
-          </label>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {terms.map((term) => (
+      {/* ── Sidebar ──────────────────────────────────────────────────── */}
+      <aside className="w-80 flex-shrink-0 border-r border-gray-200 sticky top-0 h-screen overflow-y-auto">
+        <div className="p-6">
+          {/* Wordmark */}
+          <div className="flex items-center gap-2.5 mb-8">
+            <div className="w-7 h-7 bg-green-600 rounded-md" />
+            <span className="text-base font-bold text-gray-950 tracking-tight">Mustang Scheduler</span>
+          </div>
+
+          {/* ── Term ──────────────────────────────────────────────── */}
+          <section className="mb-5">
+            <label className="sidebar-label">Term</label>
+            <div className="flex flex-col gap-1">
+              {terms.map((term) => (
+                <button
+                  key={term.code}
+                  onClick={() => setSelectedTerm(term)}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                    selectedTerm?.code === term.code
+                      ? "bg-green-600 text-white"
+                      : "text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  {term.display}
+                </button>
+              ))}
+              {terms.length === 0 && <p className="text-gray-400 text-xs">Loading terms…</p>}
+            </div>
+          </section>
+
+          <hr className="border-gray-100 my-4" />
+
+          {/* ── Courses ───────────────────────────────────────────── */}
+          <section className="mb-5">
+            <label className="sidebar-label">Courses</label>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={currentCourse}
+                onChange={(e) => setCurrentCourse(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCourseAdd()}
+                onPaste={handleCoursePaste}
+                placeholder='e.g. "CSC 101" or paste a list'
+                className="flex-1 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none
+                  placeholder:text-gray-400 focus:border-green-600 focus:ring-2 focus:ring-green-600/10 focus:bg-white"
+              />
               <button
-                key={term.code}
-                onClick={() => setSelectedTerm(term)}
-                className={`
-                  px-4 py-3 rounded-xl font-medium
-                  transition-all duration-300
-                  cursor-pointer
-                  ${
-                    selectedTerm === term
-                      ? "bg-gradient-to-r from-lime-500 to-yellow-500 text-emerald-950 shadow-lg shadow-lime-400/30"
-                      : "bg-emerald-950/30 text-emerald-400 border-2 border-emerald-700/50 hover:border-emerald-600"
-                  }
-                `}
+                onClick={handleCourseAdd}
+                className="px-3 py-2 bg-gray-950 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
               >
-                {term.display}
+                Add
               </button>
-            ))}
+            </div>
+            <p className="text-[10px] text-gray-400 mb-2">
+              Tip: paste "CSC 101, MATH 142, CPE 202" to add multiple at once
+            </p>
+            <div className="flex flex-col gap-1">
+              {courses.map((course) => (
+                <div key={course.id} className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+                  <span className="text-sm font-medium text-gray-800">{course.number}</span>
+                  <button onClick={() => removeCourse(course.id)} className="text-gray-400 hover:text-red-500 text-xs cursor-pointer">✕</button>
+                </div>
+              ))}
+              {courses.length === 0 && <p className="text-gray-400 text-xs mt-1">No courses added yet</p>}
+            </div>
+          </section>
+
+          {/* ── Locked sections ───────────────────────────────────── */}
+          {lockedSections.length > 0 && (
+            <>
+              <hr className="border-gray-100 my-4" />
+              <section className="mb-5">
+                <label className="sidebar-label">Locked Sections</label>
+                <div className="flex flex-col gap-1">
+                  {lockedSections.map((s) => (
+                    <div key={s.class_nbr} className="flex items-center justify-between px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+                      <span className="text-xs font-medium text-green-800">📌 {s.label}</span>
+                      <button
+                        onClick={() => setLockedSections((prev) => prev.filter((l) => l.class_nbr !== s.class_nbr))}
+                        className="text-green-500 hover:text-red-500 text-xs ml-2 cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
+
+          <hr className="border-gray-100 my-4" />
+
+          {/* ── Min Rating ────────────────────────────────────────── */}
+          <section className="mb-5">
+            <div className="flex justify-between items-center mb-2">
+              <label className="sidebar-label mb-0">Min Rating</label>
+              <span className="text-sm font-bold text-gray-950">
+                {minRating.toFixed(1)}
+                <span className="text-gray-400 font-normal"> / 5.0</span>
+              </span>
+            </div>
+            <input
+              type="range" min="1" max="5" step="0.1" value={minRating}
+              onChange={(e) => setMinRating(Number(e.target.value))}
+              className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer slider"
+              style={{ background: `linear-gradient(to right, #16a34a ${sliderPct}%, #e5e7eb ${sliderPct}%)` }}
+            />
+            <div className="flex justify-between mt-1 text-[10px] text-gray-400">
+              <span>Any</span><span>Excellent</span>
+            </div>
+          </section>
+
+          <hr className="border-gray-100 my-4" />
+
+          {/* ── Time Range ────────────────────────────────────────── */}
+          <section className="mb-5">
+            <label className="sidebar-label">Time Range</label>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <span className="text-[10px] text-gray-400 mb-1 block">Start</span>
+                <input type="time" value={timeStart} onChange={(e) => setTimeStart(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none focus:border-green-600" />
+              </div>
+              <div className="flex-1">
+                <span className="text-[10px] text-gray-400 mb-1 block">End</span>
+                <input type="time" value={timeEnd} onChange={(e) => setTimeEnd(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none focus:border-green-600" />
+              </div>
+            </div>
+          </section>
+
+          <hr className="border-gray-100 my-4" />
+
+          {/* ── Days preference ───────────────────────────────────── */}
+          <section className="mb-5">
+            <label className="sidebar-label">Preferred Days</label>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {DAYS_OF_WEEK.map((day) => (
+                <button key={day} onClick={() => toggleDay(day)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    preferredDays.includes(day)
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {day.slice(0, 3)}
+                </button>
+              ))}
+            </div>
+
+            {/* Days on campus mode */}
+            <label className="sidebar-label">Days on Campus</label>
+            <div className="flex rounded-lg overflow-hidden border border-gray-200">
+              {(["balanced", "minimize"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setDaysMode(mode)}
+                  className={`flex-1 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                    daysMode === mode ? "bg-gray-950 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {mode === "balanced" ? "Balanced" : "Minimize"}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <hr className="border-gray-100 my-4" />
+
+          {/* ── Gap preference ────────────────────────────────────── */}
+          <section className="mb-5">
+            <div className="flex justify-between items-center mb-2">
+              <label className="sidebar-label mb-0">Gap Preference</label>
+              <span className="text-xs text-gray-500">
+                {gapPreference === 0 ? "Compact" : `~${gapPreference}min`}
+              </span>
+            </div>
+            <input
+              type="range" min="0" max="60" step="15" value={gapPreference}
+              onChange={(e) => setGapPreference(Number(e.target.value))}
+              className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer slider"
+              style={{ background: `linear-gradient(to right, #16a34a ${gapSliderPct}%, #e5e7eb ${gapSliderPct}%)` }}
+            />
+            <div className="flex justify-between mt-1 text-[10px] text-gray-400">
+              <span>Compact</span><span>Spread out</span>
+            </div>
+          </section>
+
+          <hr className="border-gray-100 my-4" />
+
+          {/* ── Blocked times ─────────────────────────────────────── */}
+          <section className="mb-5">
+            <button
+              onClick={() => setShowBlockGrid((v) => !v)}
+              className="sidebar-label flex items-center justify-between w-full cursor-pointer hover:text-gray-700"
+            >
+              <span>Blocked Times {blockedSlots.length > 0 ? `(${blockedSlots.length})` : ""}</span>
+              <span className="text-gray-300 text-xs">{showBlockGrid ? "▲" : "▼"}</span>
+            </button>
+            {showBlockGrid && (
+              <div className="mt-2">
+                <WeekBlockGrid value={blockedSlots} onChange={setBlockedSlots} />
+              </div>
+            )}
+          </section>
+
+          <hr className="border-gray-100 my-4" />
+
+          {/* ── Action buttons ────────────────────────────────────── */}
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleFindSections}
+              disabled={!canSearch || isSearching}
+              className={`w-full py-2.5 text-sm font-semibold rounded-xl transition-all cursor-pointer
+                bg-gray-100 hover:bg-gray-200 text-gray-800
+                disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100
+                ${viewMode === "sections" && hasSearched ? "ring-2 ring-green-600 ring-offset-1" : ""}
+              `}
+            >
+              {isSearching
+                ? <span className="flex items-center justify-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-gray-400/30 border-t-gray-500 rounded-full animate-spin" />
+                    Searching…
+                  </span>
+                : "Find Sections"
+              }
+            </button>
+
+            <button
+              onClick={handleGenerateSchedules}
+              disabled={!canSearch || isGenerating}
+              className={`w-full py-2.5 bg-gray-950 hover:bg-green-600 text-white text-sm font-semibold rounded-xl
+                transition-all cursor-pointer hover:scale-[1.01] active:scale-[0.99]
+                disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:bg-gray-950
+                ${viewMode === "schedules" && hasGenerated ? "ring-2 ring-green-600 ring-offset-1" : ""}
+              `}
+            >
+              {isGenerating
+                ? <span className="flex items-center justify-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Building…
+                  </span>
+                : "Generate Schedules ✦"
+              }
+            </button>
+
+            {!canSearch && (
+              <p className="text-gray-400 text-[10px] text-center mt-1">
+                Select a term and add a course first
+              </p>
+            )}
+
+            {/* Reset */}
+            <button
+              onClick={resetFilters}
+              className="text-[10px] text-gray-400 hover:text-gray-600 underline underline-offset-2 text-center mt-1 cursor-pointer"
+            >
+              ↺ Reset filters
+            </button>
           </div>
         </div>
 
-        {/* Course Input */}
-        <div className="mb-8">
-          <label className="block text-lime-400 font-medium mb-3 text-lg">
-            Course Numbers
-          </label>
-          <div className="flex gap-3 mb-4">
-            <input
-              type="text"
-              value={currentCourse}
-              onChange={(e) => setCurrentCourse(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && addCourse()}
-              placeholder="e.g., CSC 101, MATH 141"
-              className="
-                flex-1 px-5 py-3 bg-emerald-950/30 
-                border-2 border-emerald-700/50 rounded-xl
-                text-lime-50 text-base
-                outline-none
-                transition-all duration-300
-                focus:border-lime-400 focus:shadow-lg focus:shadow-lime-400/20
-                placeholder:text-emerald-400/40
-              "
-            />
-            <button
-              onClick={addCourse}
-              className="
-                px-6 py-3 bg-gradient-to-r from-lime-500 to-yellow-500
-                hover:from-lime-400 hover:to-yellow-400
-                text-emerald-950 font-semibold
-                rounded-xl transition-all duration-300
-                hover:shadow-lg hover:shadow-lime-400/30
-              "
-            >
-              Add
-            </button>
-          </div>
+        {/* Slider thumb styles */}
+        <style>{`
+          .sidebar-label {
+            display: block;
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #6b7280;
+            margin-bottom: 0.5rem;
+          }
+          .slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: #16a34a; cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+          }
+          .slider::-moz-range-thumb {
+            width: 14px; height: 14px; border-radius: 50%;
+            background: #16a34a; cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+          }
+        `}</style>
+      </aside>
 
-          {/* Course List */}
-          <div className="flex flex-wrap gap-2">
-            {courses.map((course) => (
-              <div
-                key={course.id}
-                className="
-                  flex items-center gap-2 px-4 py-2 
-                  bg-emerald-800/40 border border-emerald-600/50
-                  rounded-lg text-lime-300
-                "
+      {/* ── Main area ────────────────────────────────────────────────── */}
+      <main className="flex-1 p-8 overflow-y-auto bg-gray-50 min-h-screen">
+        {/* Active filter chips */}
+        {activeChips.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-6">
+            {activeChips.map((chip, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-medium
+                  bg-gray-100 text-gray-700 border border-gray-200"
               >
-                <span className="font-medium">{course.number}</span>
+                {chip.label}
                 <button
-                  onClick={() => removeCourse(course.id)}
-                  className="
-                    text-red-400 hover:text-red-300 
-                    transition-colors ml-1
-                  "
+                  onClick={chip.onRemove}
+                  className="text-gray-400 hover:text-gray-700 leading-none cursor-pointer"
+                  aria-label={`Remove filter: ${chip.label}`}
                 >
                   ✕
                 </button>
-              </div>
+              </span>
             ))}
           </div>
-          {courses.length === 0 && (
-            <p className="text-emerald-500/60 text-sm mt-2">
-              No courses added yet. Add courses like "CSC 101" or "MATH 141"
-            </p>
-          )}
-        </div>
-
-        {/* Rating Filter */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-3">
-            <label className="text-lime-400 font-medium text-lg">
-              Minimum Teacher Rating
-            </label>
-            <span className="text-yellow-400 font-bold text-xl">
-              {minRating.toFixed(1)} / 5.0
-            </span>
-          </div>
-          <input
-            type="range"
-            min="1"
-            max="5"
-            step="0.1"
-            value={minRating}
-            onChange={(e) => setMinRating(Number(e.target.value))}
-            className="w-full h-3 appearance-none bg-emerald-950/50 rounded-full outline-none cursor-pointer slider"
-            style={{
-              background: `linear-gradient(to right, 
-                rgb(239 68 68) 0%, 
-                rgb(250 204 21) ${((minRating - 1) / 4) * 50}%, 
-                rgb(132 204 22) ${((minRating - 1) / 4) * 100}%, 
-                rgb(15 41 30 / 0.5) ${((minRating - 1) / 4) * 100}%)`,
-            }}
-          />
-          <div className="flex justify-between mt-2 text-emerald-500 text-sm">
-            <span>1.0 (Any)</span>
-            <span>5.0 (Excellent)</span>
-          </div>
-          <p className="text-emerald-400/70 text-sm mt-2">
-            Only use professors around the ratings of {minRating.toFixed(1)} or
-            higher
-          </p>
-        </div>
-
-        {/* Time Range */}
-        <div className="mb-8">
-          <label className="block text-lime-400 font-medium mb-3 text-lg">
-            Preferred Time Range
-          </label>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-emerald-400 text-sm mb-2">
-                Start Time
-              </label>
-              <input
-                type="time"
-                value={timeRangeStart}
-                onChange={(e) => setTimeRangeStart(e.target.value)}
-                className="
-                  w-full px-4 py-3 bg-emerald-950/30 
-                  border-2 border-emerald-700/50 rounded-xl
-                  text-lime-50 text-base
-                  outline-none
-                  transition-all duration-300
-                  focus:border-lime-400
-                "
-              />
-            </div>
-            <div>
-              <label className="block text-emerald-400 text-sm mb-2">
-                End Time
-              </label>
-              <input
-                type="time"
-                value={timeRangeEnd}
-                onChange={(e) => setTimeRangeEnd(e.target.value)}
-                className="
-                  w-full px-4 py-3 bg-emerald-950/30 
-                  border-2 border-emerald-700/50 rounded-xl
-                  text-lime-50 text-base
-                  outline-none
-                  transition-all duration-300
-                  focus:border-lime-400
-                "
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Preferred Days */}
-        <div className="mb-8">
-          <label className="block text-lime-400 font-medium mb-3 text-lg">
-            Preferred Days (Optional)
-          </label>
-          <div className="flex flex-wrap gap-3">
-            {days.map((day) => (
-              <button
-                key={day}
-                onClick={() => toggleDay(day)}
-                className={`
-                  cursor-pointer
-                  px-5 py-2.5 rounded-xl font-medium
-                  transition-all duration-300
-                  ${
-                    preferredDays.includes(day)
-                      ? "bg-gradient-to-r from-lime-500 to-yellow-500 text-emerald-950"
-                      : "bg-emerald-950/30 text-emerald-400 border-2 border-emerald-700/50 hover:border-emerald-600"
-                  }
-                `}
-              >
-                {day.slice(0, 3)}
-              </button>
-            ))}
-          </div>
-          {preferredDays.length === 0 && (
-            <p className="text-emerald-500/60 text-sm mt-2">
-              No preference selected - will show all available days
-            </p>
-          )}
-        </div>
-
-        {/* Generate Button */}
-        <button
-          onClick={handleGenerateSchedule}
-          disabled={!selectedTerm || courses.length === 0 || isGenerating}
-          className={`
-            w-full px-6 py-4 
-            font-semibold text-lg rounded-xl
-            transition-all duration-300
-            ${
-              !selectedTerm || courses.length === 0 || isGenerating
-                ? "bg-emerald-800/30 text-emerald-600 cursor-not-allowed"
-                : "bg-gradient-to-r from-lime-500 to-yellow-500 hover:from-lime-400 hover:to-yellow-400 cursor-pointer text-emerald-950 hover:shadow-xl hover:shadow-lime-400/30 hover:scale-[1.02] active:scale-[0.98]"
-            }
-          `}
-        >
-          {isGenerating ? (
-            <span className="flex items-center justify-center gap-3">
-              <div className="w-5 h-5 border-2 border-emerald-950/30 border-t-emerald-950 rounded-full animate-spin"></div>
-              Generating Schedules...
-            </span>
-          ) : (
-            "Generate Optimal Schedules"
-          )}
-        </button>
-
-        {(!selectedTerm || courses.length === 0) && (
-          <p className="text-yellow-400/80 text-sm text-center mt-3">
-            Please select a term and add at least one course
-          </p>
         )}
-      </div>
 
-      <style>{`
-        .slider::-webkit-slider-thumb {
-          appearance: none;
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #facc15, #84cc16);
-          cursor: pointer;
-          box-shadow: 0 0 20px rgba(250, 204, 21, 0.6);
-          transition: all 0.3s ease;
-        }
+        {/* Progress overlay for schedule generation */}
+        {isGenerating && viewMode === "schedules" && (
+          <div className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="w-8 h-8 border-2 border-gray-200 border-t-green-600 rounded-full animate-spin mb-5" />
+            <p className="text-gray-950 font-semibold text-base mb-1">Building schedules…</p>
+            <p className="text-gray-400 text-sm">
+              Checking ~{progressCount.toLocaleString()} combinations
+            </p>
+          </div>
+        )}
 
-        .slider::-webkit-slider-thumb:hover {
-          transform: scale(1.2);
-          box-shadow: 0 0 30px rgba(250, 204, 21, 0.8);
-        }
+        {/* Section results */}
+        {!isGenerating && viewMode === "sections" && (
+          <ClassResultsPanel
+            results={sections}
+            hasSearched={hasSearched}
+            lockedClassNbrs={lockedClassNbrs}
+            onLock={handleLock}
+          />
+        )}
 
-        .slider::-moz-range-thumb {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #facc15, #84cc16);
-          cursor: pointer;
-          border: none;
-          box-shadow: 0 0 20px rgba(250, 204, 21, 0.6);
-          transition: all 0.3s ease;
-        }
-
-        .slider::-moz-range-thumb:hover {
-          transform: scale(1.2);
-          box-shadow: 0 0 30px rgba(250, 204, 21, 0.8);
-        }
-      `}</style>
+        {/* Generated schedule results */}
+        {!isGenerating && viewMode === "schedules" && (
+          <GeneratedSchedulesPanel
+            schedules={generatedSchedules}
+            hasGenerated={hasGenerated}
+            defaultSort={defaultSort}
+            onLock={handleLock}
+            lockedClassNbrs={lockedClassNbrs}
+          />
+        )}
+      </main>
     </div>
   );
 }

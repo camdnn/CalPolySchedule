@@ -1,61 +1,76 @@
 import re
+import json
+from urllib.request import urlopen
 from datetime import datetime
 
 import psycopg
 
-
-class PolyRatingsPostgresPipeline:
-
-    def open_spider(self, spider):
-        # want to create a pipeline that grabs spider data and inserts values into db
-        # connect to the db
-        self.conn = psycopg.connect(
-            "host=localhost dbname=postgres"
-        )
-        # creates a cursor obj to do SQL queries
-        self.cur = self.conn.cursor()
-
-    def process_item(self, item, spider):
-        print("IN:", item["professor_id"])
+POLYRATINGS_URL = "https://api-prod.polyratings.org/professors.all"
 
 
-        #insert data into db if new, or updates if exists
-        # UPSERT operation that automically inserts a new row or updates
-        UPSERT_PROF = """
-        INSERT INTO professor_ratings (
-        professor_name,
-        overall_rating,
-        student_difficulties,
-        clarity,
-        num_evals,
-        last_scraped,
-        professor_key
-        )
-        VALUES (%s, %s, %s, %s, %s, NOW(), %s)
-        ON CONFLICT (professor_key)
-        DO UPDATE SET
-        professor_name          = EXCLUDED.professor_name,
-        overall_rating          = EXCLUDED.overall_rating,
-        student_difficulties    = EXCLUDED.student_difficulties,
-        clarity                 = EXCLUDED.clarity,
-        num_evals               = EXCLUDED.num_evals,
-        last_scraped            = NOW()
-        RETURNING id;
-        """
+def _normalize_professor_item(raw):
+    professor_id = raw.get("professor_id", raw.get("id"))
+    first = raw.get("firstName", "")
+    last = raw.get("lastName", "")
+    name = raw.get("name")
+    if not name:
+        name = f"{last}, {first}".strip(", ").strip()
 
-        #for inserts in professor tags
-        INSERT_TAG = """
-        INSERT INTO professor_tags (professor_id, tag, vote_count)
-        VALUES(%s, %s, %s)
-        ON CONFLICT DO NOTHING;
-        """
+    return {
+        "professor_id": professor_id,
+        "name": name,
+        "overallRating": raw.get("overallRating"),
+        "studentDifficulties": raw.get("studentDifficulties"),
+        "clarity": raw.get("clarity", raw.get("materialClear")),
+        "numEvals": raw.get("numEvals"),
+        "tags": raw.get("tags", {}),
+    }
 
-        #refresh the tags
-        DELETE_TAGS = "DELETE FROM professor_tags WHERE professor_id = %s;"
 
-        #execute -- auto commit and rollback
-        with self.conn.transaction():
-            self.cur.execute(UPSERT_PROF, (
+def _fetch_polyratings_professors(timeout=30):
+    with urlopen(POLYRATINGS_URL, timeout=timeout) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    return payload.get("result", {}).get("data", [])
+
+
+def _apply_professor_snapshot(conn, cur, professors):
+    UPSERT_PROF = """
+    INSERT INTO professor_ratings (
+    professor_name,
+    overall_rating,
+    student_difficulties,
+    clarity,
+    num_evals,
+    last_scraped,
+    professor_key
+    )
+    VALUES (%s, %s, %s, %s, %s, NOW(), %s)
+    ON CONFLICT (professor_key)
+    DO UPDATE SET
+    professor_name          = EXCLUDED.professor_name,
+    overall_rating          = EXCLUDED.overall_rating,
+    student_difficulties    = EXCLUDED.student_difficulties,
+    clarity                 = EXCLUDED.clarity,
+    num_evals               = EXCLUDED.num_evals,
+    last_scraped            = NOW()
+    RETURNING id;
+    """
+
+    INSERT_TAG = """
+    INSERT INTO professor_tags (professor_id, tag, vote_count)
+    VALUES(%s, %s, %s)
+    ON CONFLICT DO NOTHING;
+    """
+
+    DELETE_TAGS = "DELETE FROM professor_tags WHERE professor_id = %s;"
+
+    with conn.transaction():
+        for prof in professors:
+            item = _normalize_professor_item(prof)
+            if not item["professor_id"]:
+                continue
+
+            cur.execute(UPSERT_PROF, (
                 item["name"],
                 item["overallRating"],
                 item["studentDifficulties"],
@@ -64,24 +79,39 @@ class PolyRatingsPostgresPipeline:
                 item["professor_id"],
             ))
 
-            # get returned internal id (row = (id,))
-            row = self.cur.fetchone()
+            row = cur.fetchone()
             if row is None:
-                # handle error: upsert didn't return id
                 raise RuntimeError("Upsert did not return id")
 
             professor_db_id = row[0]
-
-            self.cur.execute(DELETE_TAGS, (professor_db_id,))
+            cur.execute(DELETE_TAGS, (professor_db_id,))
 
             tags_list = item["tags"] or {}
             for key, value in tags_list.items():
-                self.cur.execute(INSERT_TAG, (professor_db_id, key, value))
+                cur.execute(INSERT_TAG, (professor_db_id, key, value))
 
+
+class PolyRatingsPostgresPipeline:
+
+    def open_spider(self, spider):
+        self.conn = psycopg.connect("host=localhost dbname=postgres")
+        self.cur = self.conn.cursor()
+        self._items = []
+
+    def process_item(self, item, spider):
+        self._items.append(dict(item))
         return item
 
     # close cursor connection
     def close_spider(self, spider):
+        if self._items:
+            try:
+                _apply_professor_snapshot(self.conn, self.cur, self._items)
+            except Exception as exc:
+                spider.logger.error(
+                    "Professor refresh failed, preserving previous professor data: %s",
+                    exc,
+                )
         self.cur.close()
         self.conn.close()
 
@@ -95,7 +125,9 @@ class ClassOfferingsPostgresPipeline:
     def open_spider(self, spider):
         self.conn = psycopg.connect("host=localhost dbname=postgres")
         self.cur = self.conn.cursor()
-        self._term_id_cache = {}   # term_code → term_id
+        self._term_id_cache = {}    # term_code → term_id
+        self._cleared_terms = set() # term_ids already wiped this run
+        self._saw_new_term = False
 
     # ── term helper ────────────────────────────────────────────────────
 
@@ -125,6 +157,12 @@ class ClassOfferingsPostgresPipeline:
             academic_year = year if "Fall" in term_name else year - 1
 
         with self.conn.transaction():
+            self.cur.execute(
+                "SELECT id FROM terms WHERE term_code = %s;",
+                (term_code,),
+            )
+            existing_row = self.cur.fetchone()
+
             self.cur.execute("""
                 INSERT INTO terms
                     (term_code, term_name, term_start, term_end,
@@ -140,8 +178,22 @@ class ClassOfferingsPostgresPipeline:
             """, (term_code, term_name, term_start, term_end, academic_year))
             row = self.cur.fetchone()
 
-        self._term_id_cache[term_code] = row[0]
-        return row[0]
+        term_id = row[0]
+        if existing_row is None:
+            self._saw_new_term = True
+        self._term_id_cache[term_code] = term_id
+
+        # First time we see this term in the run: delete all existing offerings
+        # so stale / null-value rows from previous scrapes don't linger.
+        if term_id not in self._cleared_terms:
+            with self.conn.transaction():
+                self.cur.execute(
+                    "DELETE FROM class_offerings WHERE term_id = %s;",
+                    (term_id,),
+                )
+            self._cleared_terms.add(term_id)
+
+        return term_id
 
     # ── main insert ────────────────────────────────────────────────────
 
@@ -180,7 +232,7 @@ class ClassOfferingsPostgresPipeline:
                 item["component"],
                 item.get("descr"),
                 item.get("days"),
-                item.get("start_time"),   # e.g. "08:10 AM" or None
+                item.get("start_time"),   # "HH:MM:SS" 24-hour from _parse_time
                 item.get("end_time"),
                 item.get("facility_descr"),
                 item.get("instructor_name"),
@@ -190,6 +242,18 @@ class ClassOfferingsPostgresPipeline:
         return item
 
     def close_spider(self, spider):
+        if self._saw_new_term:
+            try:
+                professors = _fetch_polyratings_professors()
+                _apply_professor_snapshot(self.conn, self.cur, professors)
+                spider.logger.info(
+                    "Detected a new term; refreshed professor ratings from PolyRatings."
+                )
+            except Exception as exc:
+                spider.logger.error(
+                    "New term detected, but professor refresh failed. Keeping previous data: %s",
+                    exc,
+                )
+
         self.cur.close()
         self.conn.close()
-
