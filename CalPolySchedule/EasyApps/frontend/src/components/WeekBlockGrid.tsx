@@ -62,14 +62,14 @@ interface WeekBlockGridProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function WeekBlockGrid({ value, onChange }: WeekBlockGridProps) {
-  const [cells, setCells]     = useState<Set<string>>(() => slotsToCells(value));
+  const [cells, setCells] = useState<Set<string>>(() => slotsToCells(value));
 
   // Drag state in refs so event handlers always see current values
-  const isDragging    = useRef(false);
-  const dragStart     = useRef<{ dayIdx: number; slotIdx: number } | null>(null);
-  const dragMode      = useRef<"block" | "unblock">("block");
+  const isDragging   = useRef(false);
+  const dragStart    = useRef<{ dayIdx: number; slotIdx: number } | null>(null);
+  const dragMode     = useRef<"block" | "unblock">("block");
   // Track which cells were in the drag selection to avoid repainting on re-entry
-  const dragSnapshot  = useRef<Set<string>>(new Set());
+  const dragSnapshot = useRef<Set<string>>(new Set());
 
   // Sync external `value` prop → internal cells (e.g. "Reset filters")
   useEffect(() => {
@@ -84,15 +84,15 @@ export default function WeekBlockGrid({ value, onChange }: WeekBlockGridProps) {
     return () => clearTimeout(t);
   }, [cells]);
 
-  // Release drag on mouseup anywhere in the window
+  // Release drag on pointerup anywhere in the window (covers mouse + touch)
   useEffect(() => {
     const up = () => {
-      isDragging.current = false;
-      dragStart.current  = null;
+      isDragging.current   = false;
+      dragStart.current    = null;
       dragSnapshot.current = new Set();
     };
-    window.addEventListener("mouseup", up);
-    return () => window.removeEventListener("mouseup", up);
+    window.addEventListener("pointerup", up);
+    return () => window.removeEventListener("pointerup", up);
   }, []);
 
   // Apply the drag rectangle to cells
@@ -128,11 +128,12 @@ export default function WeekBlockGrid({ value, onChange }: WeekBlockGridProps) {
     []
   );
 
-  function handleMouseDown(dayIdx: number, slotIdx: number) {
+  function handlePointerDown(e: React.PointerEvent, dayIdx: number, slotIdx: number) {
+    e.preventDefault(); // prevent text selection and scroll on touch
     const key = slotKey(dayIdx, slotIdx);
-    isDragging.current  = true;
-    dragStart.current   = { dayIdx, slotIdx };
-    dragMode.current    = cells.has(key) ? "unblock" : "block";
+    isDragging.current   = true;
+    dragStart.current    = { dayIdx, slotIdx };
+    dragMode.current     = cells.has(key) ? "unblock" : "block";
     dragSnapshot.current = new Set([key]);
 
     setCells((prev) => {
@@ -143,9 +144,18 @@ export default function WeekBlockGrid({ value, onChange }: WeekBlockGridProps) {
     });
   }
 
-  function handleMouseEnter(dayIdx: number, slotIdx: number) {
+  // Handle pointer move on the grid container — works for both mouse drag and touch drag.
+  // Uses elementFromPoint to find which cell is under the pointer/finger.
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!isDragging.current) return;
-    paintDragRect(dayIdx, slotIdx);
+    e.preventDefault();
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    if (!el) return;
+    const day  = el.dataset.day;
+    const slot = el.dataset.slot;
+    if (day !== undefined && slot !== undefined) {
+      paintDragRect(Number(day), Number(slot));
+    }
   }
 
   const hasBlocked = cells.size > 0;
@@ -161,15 +171,18 @@ export default function WeekBlockGrid({ value, onChange }: WeekBlockGridProps) {
         ))}
       </div>
 
-      {/* Grid: time label + 5 day columns */}
-      <div className="flex gap-0.5">
+      {/* Grid: time label + 5 day columns — touch-action:none prevents page scroll during drag */}
+      <div
+        className="flex gap-0.5"
+        style={{ touchAction: "none" }}
+        onPointerMove={handlePointerMove}
+      >
         {/* Time labels */}
         <div className="flex flex-col gap-0.5" style={{ width: 20 }}>
           {Array.from({ length: SLOT_COUNT }, (_, i) => (
             <div
               key={i}
-              className="flex items-center justify-end text-[9px] text-gray-300 leading-none"
-              style={{ height: 10 }}
+              className="flex items-center justify-end text-[9px] text-gray-300 leading-none h-3.5 md:h-[10px]"
             >
               {hourLabel(i)}
             </div>
@@ -184,14 +197,14 @@ export default function WeekBlockGrid({ value, onChange }: WeekBlockGridProps) {
               return (
                 <div
                   key={slotIdx}
-                  className={`rounded-[2px] cursor-crosshair transition-colors duration-75 ${
+                  data-day={dayIdx}
+                  data-slot={slotIdx}
+                  className={`rounded-[2px] cursor-crosshair transition-colors duration-75 h-3.5 md:h-[10px] ${
                     blocked
                       ? "bg-red-300 border border-red-400"
                       : "bg-gray-100 hover:bg-gray-200"
                   }`}
-                  style={{ height: 10 }}
-                  onMouseDown={() => handleMouseDown(dayIdx, slotIdx)}
-                  onMouseEnter={() => handleMouseEnter(dayIdx, slotIdx)}
+                  onPointerDown={(e) => handlePointerDown(e, dayIdx, slotIdx)}
                 />
               );
             })}
@@ -202,7 +215,7 @@ export default function WeekBlockGrid({ value, onChange }: WeekBlockGridProps) {
       {/* Legend + clear */}
       <div className="flex items-center justify-between mt-1.5">
         <span className="text-[9px] text-gray-400">
-          Click or drag to block times
+          Tap or drag to block times
         </span>
         {hasBlocked && (
           <button

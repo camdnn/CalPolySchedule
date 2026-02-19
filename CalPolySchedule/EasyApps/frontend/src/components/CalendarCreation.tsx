@@ -133,6 +133,7 @@ export default function Dashboard() {
   // ── Find Sections ─────────────────────────────────────────────────────────
   const handleFindSections = async () => {
     if (!selectedTerm || courses.length === 0) return;
+    setSidebarOpen(false); // auto-close drawer on mobile
     setIsSearching(true);
     setViewMode("sections");
     try {
@@ -149,6 +150,7 @@ export default function Dashboard() {
   // ── Generate Schedules ────────────────────────────────────────────────────
   const handleGenerateSchedules = async () => {
     if (!selectedTerm || courses.length === 0) return;
+    setSidebarOpen(false); // auto-close drawer on mobile
     setIsGenerating(true);
     setViewMode("schedules");
     try {

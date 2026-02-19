@@ -167,7 +167,7 @@ export default function ClassResultsPanel({
                             text-xs px-2 py-0.5 rounded-full border transition-all duration-150 cursor-pointer
                             ${isLocked
                               ? "bg-green-100 border-green-300 text-green-700 font-medium"
-                              : "opacity-0 group-hover:opacity-100 bg-gray-100 border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-700"
+                              : "bg-gray-100 border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-700 md:opacity-0 md:group-hover:opacity-100"
                             }
                           `}
                         >
