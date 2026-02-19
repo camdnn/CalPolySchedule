@@ -3,7 +3,7 @@ const cors = require("cors");
 const scheduleRoutes = require("./routes/schedule");
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // ── Middleware ─────────────────────────────────────────────────────
 // cors() lets the React dev server (localhost:5173) talk to this
@@ -12,6 +12,9 @@ app.use(cors());
 
 // Parses JSON request bodies so req.body works
 app.use(express.json());
+
+// ── Health check (used by UptimeRobot to prevent Render spin-down) ─
+app.get("/health", (_req, res) => res.sendStatus(200));
 
 // ── Routes ────────────────────────────────────────────────────────
 // Everything under /api/schedule is handled by the schedule router
