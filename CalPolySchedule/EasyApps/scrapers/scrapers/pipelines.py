@@ -8,12 +8,19 @@ from pathlib import Path
 import psycopg
 from dotenv import load_dotenv
 
+# Load scraper-local env vars (DATABASE_URL, etc.) before opening DB connections.
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 POLYRATINGS_URL = "https://api-prod.polyratings.org/professors.all"
 
 
 def _normalize_professor_item(raw):
+    """
+    Accepts either:
+      - raw API object from PolyRatings spider/fetch
+      - already-normalized dict from pipeline collection
+    Returns canonical shape consumed by DB upsert helper.
+    """
     professor_id = raw.get("professor_id", raw.get("id"))
     first = raw.get("firstName", "")
     last = raw.get("lastName", "")
@@ -33,12 +40,17 @@ def _normalize_professor_item(raw):
 
 
 def _fetch_polyratings_professors(timeout=30):
+    """Fetch latest professor payload directly from PolyRatings API."""
     with urlopen(POLYRATINGS_URL, timeout=timeout) as response:
         payload = json.loads(response.read().decode("utf-8"))
     return payload.get("result", {}).get("data", [])
 
 
 def _apply_professor_snapshot(conn, cur, professors):
+    """
+    Transactionally upsert professor base rows and refresh each professor's tags.
+    If this function raises, caller can keep prior DB state unchanged.
+    """
     UPSERT_PROF = """
     INSERT INTO professor_ratings (
     professor_name,
@@ -97,6 +109,13 @@ def _apply_professor_snapshot(conn, cur, professors):
 
 
 class PolyRatingsPostgresPipeline:
+    """
+    Pipeline for `polyratings` spider.
+    Strategy:
+      1. Collect scraped items in memory
+      2. Apply one transactional snapshot at close_spider
+    This avoids partial updates if crawl fails mid-stream.
+    """
 
     def open_spider(self, spider):
         self.conn = psycopg.connect(os.environ["DATABASE_URL"])
@@ -104,6 +123,7 @@ class PolyRatingsPostgresPipeline:
         self._items = []
 
     def process_item(self, item, spider):
+        # Defer DB writes until close_spider for atomic refresh behavior.
         self._items.append(dict(item))
         return item
 
@@ -135,7 +155,8 @@ class ClassOfferingsPostgresPipeline:
         self.conn = psycopg.connect(os.environ["DATABASE_URL"])
         self.cur = self.conn.cursor()
         self._items = []          # all yielded items, collected in memory
-        self._term_meta = {}      # term_code → first item seen (carries metadata)
+        # term_code -> first item seen (used for term metadata upsert)
+        self._term_meta = {}
 
     # ── term helper ────────────────────────────────────────────────────
 
@@ -155,13 +176,16 @@ class ClassOfferingsPostgresPipeline:
                 pass
 
         term_name = item.get("term_name", "")
-        academic_year = 2025  # fallback
+        # Fallback protects against rare parse failures/missing year text.
+        academic_year = 2025
         year_match = re.search(r"(\d{4})", term_name)
         if year_match:
             year = int(year_match.group(1))
+            # Academic year rolls over at Fall.
             academic_year = year if "Fall" in term_name else year - 1
 
         with self.conn.transaction():
+            # Check if term existed before this run to detect "new term" event.
             self.cur.execute(
                 "SELECT id FROM terms WHERE term_code = %s;",
                 (term_code,),
@@ -191,6 +215,7 @@ class ClassOfferingsPostgresPipeline:
 
     def process_item(self, item, spider):
         term_code = item["term"]
+        # Keep one representative item per term for term_name/date metadata.
         if term_code not in self._term_meta:
             self._term_meta[term_code] = dict(item)
         self._items.append(dict(item))
@@ -235,6 +260,7 @@ class ClassOfferingsPostgresPipeline:
         saw_new_term = False
 
         for term_code, items in by_term.items():
+            # Ensure `terms` row is up to date before writing class_offerings.
             term_id, is_new = self._get_or_create_term(self._term_meta[term_code])
             if is_new:
                 saw_new_term = True
@@ -259,6 +285,7 @@ class ClassOfferingsPostgresPipeline:
             ]
 
             # Single transaction per term: delete stale rows then bulk insert.
+            # If insert fails, delete is rolled back too (atomic replacement).
             with self.conn.transaction():
                 self.cur.execute(
                     "DELETE FROM class_offerings WHERE term_id = %s;",
@@ -271,6 +298,8 @@ class ClassOfferingsPostgresPipeline:
             )
 
         if saw_new_term:
+            # Business rule: refresh professors when a new term is detected.
+            # On failure we log and keep existing professor data.
             try:
                 professors = _fetch_polyratings_professors()
                 _apply_professor_snapshot(self.conn, self.cur, professors)

@@ -26,13 +26,13 @@ def _parse_time(raw: str | None) -> str | None:
 
 class ClassOfferingsSpider(scrapy.Spider):
     """
-    Scrapes all class offerings for the current term from schedules.calpoly.edu.
+    Scrapes class offerings from schedules.calpoly.edu and emits normalized
+    item dictionaries for DB ingestion by ClassOfferingsPostgresPipeline.
 
     Flow:
-      1. Homepage  → extract term code (e.g. "2262") and term name
-      2. 7 college subject-listing pages → collect subject page links
-      3. Each subject page (e.g. subject_CSC_curr.htm) has every section
-         for that subject in one HTML table → parse rows → yield items
+      1. Home/term page: extract term metadata (code/name/date range)
+      2. College subject-list pages: collect subject page links
+      3. Subject pages: parse one table row per section and yield item
     """
 
     name = "class_offerings"
@@ -53,6 +53,8 @@ class ClassOfferingsSpider(scrapy.Spider):
 
     # Each spider activates only its own pipeline
     custom_settings = {
+        # This spider should only run class-offerings DB writes.
+        # Keeping pipelines spider-local prevents accidental cross-writes.
         "ITEM_PIPELINES": {
             "scrapers.pipelines.ClassOfferingsPostgresPipeline": 300,
         },
@@ -60,6 +62,8 @@ class ClassOfferingsSpider(scrapy.Spider):
 
     # ── Start at the homepage ──────────────────────────────────
     def start_requests(self):
+        # Entry point for this spider. We start from the current-term index
+        # and then follow term-specific subject links found there.
         yield scrapy.Request(url=self.BASE_URL + "index_curr.htm", callback=self.parse_homepage)
 
     def parse_homepage(self, response):
@@ -78,6 +82,7 @@ class ClassOfferingsSpider(scrapy.Spider):
         term_date_text = response.css("span.termDate::text").get("").strip()
 
         if not term_code:
+            # If term extraction fails, downstream rows cannot be keyed by term.
             self.logger.error("Could not extract term code from homepage.")
             return
 
@@ -99,6 +104,7 @@ class ClassOfferingsSpider(scrapy.Spider):
 
         # Fallback to legacy "_curr" pages if term page does not expose links.
         if not subject_pages:
+            # Site occasionally only exposes legacy *_curr links.
             subject_pages = set(self.COLLEGE_SUBJECT_PAGES)
 
         # ── follow each college's subject-listing page ─────────
@@ -115,8 +121,8 @@ class ClassOfferingsSpider(scrapy.Spider):
         """
         Each college page has rows like:
           <td class="subjectCode"><a href="subject_CSC_curr.htm">CSC</a></td>
-        Follow every subject_*_curr.htm link.
-        Scrapy's dupe filter prevents re-fetching a subject that appears
+        Follow every subject_*.htm link.
+        Scrapy's duplicate filter prevents re-fetching a subject that appears
         under multiple colleges.
         """
         for link in response.css("td.subjectCode a"):
@@ -144,6 +150,8 @@ class ClassOfferingsSpider(scrapy.Spider):
         term_code = response.meta["term_code"]
         term_name = response.meta["term_name"]
         term_date_text = response.meta["term_date_text"]
+        # Term metadata is carried through meta so each yielded section row
+        # can be tied to the right term in the DB layer.
 
         for row in response.css("table#listing tbody tr"):
             # Skip cancelled sections (class="entry1 cancelled")
@@ -169,6 +177,7 @@ class ClassOfferingsSpider(scrapy.Spider):
                 descr = title_attr[idx:].strip()
 
             # ── Class number (unique per section) ──
+            # This is the core section identifier used by downstream logic.
             class_nbr_text = row.css("td.courseClass::text").get("").strip()
             if not class_nbr_text or class_nbr_text.startswith("*"):
                 continue
@@ -182,6 +191,7 @@ class ClassOfferingsSpider(scrapy.Spider):
             component = row.css("td.courseType span::text").get("").strip()
 
             # Days: try inside a <span> first, fall back to direct td text
+            # Some rows differ in markup; fallback avoids dropping valid data.
             days = (
                 row.css("td.courseDays span::text").get("")
                 or row.css("td.courseDays::text").get("")
@@ -191,7 +201,6 @@ class ClassOfferingsSpider(scrapy.Spider):
             start_time = _parse_time(row.css("td.startTime::text").get(""))
             end_time   = _parse_time(row.css("td.endTime::text").get(""))
 
-         
             # Instructor: prefer <a title="Full Name">, fall back to link text
             # then bare td text (personName only present on the first row of
             # each rowspan group; later rows yield None, which is correct)
@@ -221,19 +230,23 @@ class ClassOfferingsSpider(scrapy.Spider):
                     pass
 
             yield {
+                # Term context
                 "term": term_code,
                 "term_name": term_name,
                 "term_date_text": term_date_text,
+                # Course identity
                 "subject": subject,
                 "catalog_nbr": catalog_nbr,
                 "descr": descr,
                 "class_section": class_section,
                 "class_nbr": class_nbr,
                 "component": component,
+                # Meeting details
                 "days": days,
                 "start_time": start_time,
                 "end_time": end_time,
                 "instructor_name": instructor_name,
                 "facility_descr": facility_descr,
+                # Capacity signal used by UI for "open/full"
                 "enrollment_available": enrollment_available,
             }

@@ -9,6 +9,7 @@
 
 BOT_NAME = "scrapers"
 
+# Scrapy discovers spider modules from this package.
 SPIDER_MODULES = ["scrapers.spiders"]
 NEWSPIDER_MODULE = "scrapers.spiders"
 
@@ -17,6 +18,7 @@ NEWSPIDER_MODULE = "scrapers.spiders"
 #USER_AGENT = "scrapers (+http://www.yourdomain.com)"
 
 # Obey robots.txt rules
+# Individual spiders can override this in `custom_settings` when needed.
 ROBOTSTXT_OBEY = True
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
@@ -64,6 +66,7 @@ ROBOTSTXT_OBEY = True
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 # Pipelines are set per-spider via custom_settings so each spider
 # only activates its own pipeline (see each spider file).
+# Keeping this global dict empty avoids accidentally running both pipelines.
 ITEM_PIPELINES = {}
 
 # Enable and configure the AutoThrottle extension (disabled by default)
@@ -88,5 +91,6 @@ ITEM_PIPELINES = {}
 #HTTPCACHE_STORAGE = "scrapy.extensions.httpcache.FilesystemCacheStorage"
 
 # Set settings whose default value is deprecated to a future-proof value
+# Required by newer Scrapy versions when using asyncio-compatible reactor.
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
