@@ -21,7 +21,8 @@ const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 // Single source of truth for initial filter values and reset behavior.
 const DEFAULTS = {
-  minRating:      3.5,
+  minRating:      3.0,
+  openOnly:       false,
   timeStart:      "08:00",
   timeEnd:        "17:00",
   preferredDays:  [] as string[],
@@ -61,6 +62,7 @@ export default function Dashboard() {
 
   // ── Filter sliders / toggles ─────────────────────────────────────────────
   const [minRating, setMinRating]           = useState(DEFAULTS.minRating);
+  const [openOnly, setOpenOnly]             = useState(DEFAULTS.openOnly);
   const [timeStart, setTimeStart]           = useState(DEFAULTS.timeStart);
   const [timeEnd, setTimeEnd]               = useState(DEFAULTS.timeEnd);
   const [preferredDays, setPreferredDays]   = useState<string[]>(DEFAULTS.preferredDays);
@@ -128,6 +130,7 @@ export default function Dashboard() {
       startTime: timeStart,
       endTime:   timeEnd,
     });
+    if (openOnly) params.set("openOnly", "true");
     if (preferredDays.length > 0) {
       const codes = preferredDays.map((d) => DAY_TO_CODE[d]).filter(Boolean).join(",");
       if (codes) params.set("days", codes);
@@ -139,7 +142,7 @@ export default function Dashboard() {
       params.set("lockedClassNbrs", lockedSections.map((s) => s.class_nbr).join(","));
     }
     return params;
-  }, [selectedTerm, courses, minRating, timeStart, timeEnd, preferredDays, blockedSlots, lockedSections]);
+  }, [selectedTerm, courses, minRating, openOnly, timeStart, timeEnd, preferredDays, blockedSlots, lockedSections]);
 
   // ── Find Sections ─────────────────────────────────────────────────────────
   // Fetches raw section rows with current filters.
@@ -240,6 +243,7 @@ export default function Dashboard() {
   // Resets every tunable constraint but keeps selected term/courses.
   const resetFilters = () => {
     setMinRating(DEFAULTS.minRating);
+    setOpenOnly(DEFAULTS.openOnly);
     setTimeStart(DEFAULTS.timeStart);
     setTimeEnd(DEFAULTS.timeEnd);
     setPreferredDays([]);
@@ -255,6 +259,10 @@ export default function Dashboard() {
     minRating !== DEFAULTS.minRating && {
       label: `★ min ${minRating.toFixed(1)}`,
       onRemove: () => setMinRating(DEFAULTS.minRating),
+    },
+    openOnly && {
+      label: "Open only",
+      onRemove: () => setOpenOnly(false),
     },
     timeStart !== DEFAULTS.timeStart && {
       label: `from ${fmtTime(timeStart)}`,
@@ -288,7 +296,7 @@ export default function Dashboard() {
 
   const canSearch    = !!selectedTerm && courses.length > 0;
   // Slider fill percentages power CSS linear-gradient tracks.
-  const sliderPct    = ((minRating - 1) / 4) * 100;
+  const sliderPct    = (minRating / 4) * 100;
   const gapSliderPct = (gapPreference / 60) * 100;
   // Default generated-schedule sort follows "days mode" preference.
   const defaultSort  = daysMode === "minimize" ? "fewest-days" as const : "rating" as const;
@@ -429,11 +437,11 @@ export default function Dashboard() {
               <label className="sidebar-label mb-0">Min Rating</label>
               <span className="text-sm font-bold text-gray-950">
                 {minRating.toFixed(1)}
-                <span className="text-gray-400 font-normal"> / 5.0</span>
+                <span className="text-gray-400 font-normal"> / 4.0</span>
               </span>
             </div>
             <input
-              type="range" min="1" max="5" step="0.1" value={minRating}
+              type="range" min="0" max="4" step="0.1" value={minRating}
               onChange={(e) => setMinRating(Number(e.target.value))}
               className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer slider"
               style={{ background: `linear-gradient(to right, #16a34a ${sliderPct}%, #e5e7eb ${sliderPct}%)` }}
@@ -441,6 +449,22 @@ export default function Dashboard() {
             <div className="flex justify-between mt-1 text-[10px] text-gray-400">
               <span>Any</span><span>Excellent</span>
             </div>
+          </section>
+
+          <hr className="border-gray-100 my-4" />
+
+          {/* ── Open sections only ────────────────────────────────── */}
+          <section className="mb-5">
+            <button
+              onClick={() => setOpenOnly((v) => !v)}
+              className="flex items-center justify-between w-full cursor-pointer"
+            >
+              <label className="sidebar-label mb-0 cursor-pointer">Open Sections Only</label>
+              <div className={`relative w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0 ${openOnly ? "bg-green-600" : "bg-gray-200"}`}>
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${openOnly ? "translate-x-4" : "translate-x-0.5"}`} />
+              </div>
+            </button>
+            <p className="text-[10px] text-gray-400 mt-1">Hide sections with no available seats</p>
           </section>
 
           <hr className="border-gray-100 my-4" />

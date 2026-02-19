@@ -175,7 +175,7 @@ router.get("/terms", async (req, res) => {
 router.get("/schedule", async (req, res) => {
   try {
     // Query-string API inputs from frontend filters.
-    const { term, courses, minRating, startTime, endTime, days, blockedTimes } = req.query;
+    const { term, courses, minRating, startTime, endTime, days, blockedTimes, openOnly } = req.query;
     if (!term || !courses) return res.status(400).json({ error: "term and courses are required" });
     if (startTime && endTime && startTime > endTime) {
       return res.status(400).json({ error: "startTime must be <= endTime" });
@@ -192,6 +192,20 @@ router.get("/schedule", async (req, res) => {
     const result = await pool.query(SQL, params);
     let rows = result.rows;
 
+    // Deduplicate: the professor_ratings LIKE join can match multiple professors
+    // with the same last name, producing duplicate rows for the same section.
+    // Keep the row with the highest num_evals (most specific match).
+    {
+      const byNbr = new Map();
+      for (const row of rows) {
+        const existing = byNbr.get(row.class_nbr);
+        if (!existing || (row.num_evals ?? -1) > (existing.num_evals ?? -1)) {
+          byNbr.set(row.class_nbr, row);
+        }
+      }
+      rows = [...byNbr.values()];
+    }
+
     // Keep unrated sections (null) so users are not over-filtered.
     if (minRating) {
       const min = parseFloat(minRating);
@@ -202,6 +216,11 @@ router.get("/schedule", async (req, res) => {
     const blocked = parseBlockedSlots(blockedTimes);
     if (blocked.length > 0) {
       rows = rows.filter((r) => !sectionIsBlocked(r, blocked));
+    }
+
+    // Hide sections with no available seats when openOnly is requested.
+    if (openOnly === "true") {
+      rows = rows.filter((r) => r.enrollment_available !== null && r.enrollment_available > 0);
     }
 
     res.json(rows);
@@ -221,7 +240,7 @@ router.get("/generate", async (req, res) => {
   try {
     const {
       term, courses, minRating, startTime, endTime, days,
-      blockedTimes, lockedClassNbrs,
+      blockedTimes, lockedClassNbrs, openOnly,
     } = req.query;
     if (!term || !courses) return res.status(400).json({ error: "term and courses are required" });
 
@@ -236,6 +255,18 @@ router.get("/generate", async (req, res) => {
     const result = await pool.query(SQL, params);
     let rows = result.rows;
 
+    // Deduplicate: professor LIKE join can produce duplicate rows per section.
+    {
+      const byNbr = new Map();
+      for (const row of rows) {
+        const existing = byNbr.get(row.class_nbr);
+        if (!existing || (row.num_evals ?? -1) > (existing.num_evals ?? -1)) {
+          byNbr.set(row.class_nbr, row);
+        }
+      }
+      rows = [...byNbr.values()];
+    }
+
     // Filter by min rating (keep unknowns)
     if (minRating) {
       const min = parseFloat(minRating);
@@ -246,6 +277,11 @@ router.get("/generate", async (req, res) => {
     const blocked = parseBlockedSlots(blockedTimes);
     if (blocked.length > 0) {
       rows = rows.filter((r) => !sectionIsBlocked(r, blocked));
+    }
+
+    // Hide sections with no available seats when openOnly is requested.
+    if (openOnly === "true") {
+      rows = rows.filter((r) => r.enrollment_available !== null && r.enrollment_available > 0);
     }
 
     // Separate locked sections (fixed slots) from unlocked (to be permuted)
