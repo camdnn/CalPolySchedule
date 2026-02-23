@@ -15,19 +15,23 @@ import WeekBlockGrid from "./WeekBlockGrid.tsx";
 // ── Constants / helpers ───────────────────────────────────────────────────────
 // Maps UI day labels to backend single-letter day codes.
 const DAY_TO_CODE: Record<string, string> = {
-  Monday: "M", Tuesday: "T", Wednesday: "W", Thursday: "R", Friday: "F",
+  Monday: "M",
+  Tuesday: "T",
+  Wednesday: "W",
+  Thursday: "R",
+  Friday: "F",
 };
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 // Single source of truth for initial filter values and reset behavior.
 const DEFAULTS = {
-  minRating:      3.0,
-  openOnly:       false,
-  timeStart:      "08:00",
-  timeEnd:        "17:00",
-  preferredDays:  [] as string[],
-  gapPreference:  0,   // minutes; 0 = no preference / compact
-  daysMode:       "balanced" as "balanced" | "minimize",
+  minRating: 3.0,
+  openOnly: false,
+  timeStart: "08:00",
+  timeEnd: "17:00",
+  preferredDays: [] as string[],
+  gapPreference: 0, // minutes; 0 = no preference / compact
+  daysMode: "balanced" as "balanced" | "minimize",
 };
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -48,45 +52,54 @@ function fmtTime(t: string): string {
 type ViewMode = "sections" | "schedules";
 
 // ── Filter chip helpers ───────────────────────────────────────────────────────
-interface Chip { label: string; onRemove: () => void }
+interface Chip {
+  label: string;
+  onRemove: () => void;
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   // ── Term + courses ───────────────────────────────────────────────────────
   // `terms` loaded from backend; `selectedTerm` drives every schedule query.
-  const [terms, setTerms]           = useState<Term[]>([]);
+  const [terms, setTerms] = useState<Term[]>([]);
   const [selectedTerm, setSelectedTerm] = useState<Term | null>(null);
   // User-requested courses, plus active input textbox value.
-  const [courses, setCourses]       = useState<CourseProps[]>([]);
+  const [courses, setCourses] = useState<CourseProps[]>([]);
   const [currentCourse, setCurrentCourse] = useState("");
 
   // ── Filter sliders / toggles ─────────────────────────────────────────────
-  const [minRating, setMinRating]           = useState(DEFAULTS.minRating);
-  const [openOnly, setOpenOnly]             = useState(DEFAULTS.openOnly);
-  const [timeStart, setTimeStart]           = useState(DEFAULTS.timeStart);
-  const [timeEnd, setTimeEnd]               = useState(DEFAULTS.timeEnd);
-  const [preferredDays, setPreferredDays]   = useState<string[]>(DEFAULTS.preferredDays);
-  const [gapPreference, setGapPreference]   = useState(DEFAULTS.gapPreference);
-  const [daysMode, setDaysMode]             = useState<"balanced" | "minimize">(DEFAULTS.daysMode);
+  const [minRating, setMinRating] = useState(DEFAULTS.minRating);
+  const [openOnly, setOpenOnly] = useState(DEFAULTS.openOnly);
+  const [timeStart, setTimeStart] = useState(DEFAULTS.timeStart);
+  const [timeEnd, setTimeEnd] = useState(DEFAULTS.timeEnd);
+  const [preferredDays, setPreferredDays] = useState<string[]>(
+    DEFAULTS.preferredDays,
+  );
+  const [gapPreference, setGapPreference] = useState(DEFAULTS.gapPreference);
+  const [daysMode, setDaysMode] = useState<"balanced" | "minimize">(
+    DEFAULTS.daysMode,
+  );
 
   // ── Block grid ───────────────────────────────────────────────────────────
-  const [blockedSlots, setBlockedSlots]     = useState<BlockedSlot[]>([]);
-  const [showBlockGrid, setShowBlockGrid]   = useState(false);
+  const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>([]);
+  const [showBlockGrid, setShowBlockGrid] = useState(false);
 
   // ── Locked sections ──────────────────────────────────────────────────────
   const [lockedSections, setLockedSections] = useState<LockedSection[]>([]);
 
   // ── Results state ────────────────────────────────────────────────────────
   // Flat section results from /api/schedule.
-  const [sections, setSections]             = useState<ScheduleRowProps[]>([]);
-  const [hasSearched, setHasSearched]       = useState(false);
-  const [isSearching, setIsSearching]       = useState(false);
+  const [sections, setSections] = useState<ScheduleRowProps[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Combination results from /api/generate.
-  const [generatedSchedules, setGeneratedSchedules] = useState<GeneratedSchedule[]>([]);
-  const [hasGenerated, setHasGenerated]             = useState(false);
-  const [isGenerating, setIsGenerating]             = useState(false);
-  const [progressCount, setProgressCount]           = useState(0);
+  const [generatedSchedules, setGeneratedSchedules] = useState<
+    GeneratedSchedule[]
+  >([]);
+  const [hasGenerated, setHasGenerated] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [progressCount, setProgressCount] = useState(0);
 
   // Controls whether right panel shows section rows or generated combos.
   const [viewMode, setViewMode] = useState<ViewMode>("sections");
@@ -103,7 +116,9 @@ export default function Dashboard() {
   useEffect(() => {
     if (window.innerWidth >= 768) return;
     document.documentElement.style.overflow = sidebarOpen ? "hidden" : "";
-    return () => { document.documentElement.style.overflow = ""; };
+    return () => {
+      document.documentElement.style.overflow = "";
+    };
   }, [sidebarOpen]);
 
   // Load terms on mount
@@ -111,7 +126,10 @@ export default function Dashboard() {
   useEffect(() => {
     fetchJson<ApiTermRowProps[]>("/api/terms")
       .then((rows) => {
-        const mapped = rows.map((r) => ({ code: r.term_code, display: r.term_name }));
+        const mapped = rows.map((r) => ({
+          code: r.term_code,
+          display: r.term_name,
+        }));
         setTerms(mapped);
         setSelectedTerm(mapped[0] ?? null);
       })
@@ -130,7 +148,9 @@ export default function Dashboard() {
     } else {
       if (progressRef.current) clearInterval(progressRef.current);
     }
-    return () => { if (progressRef.current) clearInterval(progressRef.current); };
+    return () => {
+      if (progressRef.current) clearInterval(progressRef.current);
+    };
   }, [isGenerating]);
 
   // ── Shared URL params ────────────────────────────────────────────────────
@@ -138,25 +158,41 @@ export default function Dashboard() {
   // Non-empty optional filters are conditionally appended.
   const buildParams = useCallback((): URLSearchParams => {
     const params = new URLSearchParams({
-      term:      selectedTerm!.code,
-      courses:   courses.map((c) => c.number).join(","),
+      term: selectedTerm!.code,
+      courses: courses.map((c) => c.number).join(","),
       minRating: String(minRating),
       startTime: timeStart,
-      endTime:   timeEnd,
+      endTime: timeEnd,
     });
     if (openOnly) params.set("openOnly", "true");
     if (preferredDays.length > 0) {
-      const codes = preferredDays.map((d) => DAY_TO_CODE[d]).filter(Boolean).join(",");
+      const codes = preferredDays
+        .map((d) => DAY_TO_CODE[d])
+        .filter(Boolean)
+        .join(",");
       if (codes) params.set("days", codes);
     }
     if (blockedSlots.length > 0) {
       params.set("blockedTimes", JSON.stringify(blockedSlots));
     }
     if (lockedSections.length > 0) {
-      params.set("lockedClassNbrs", lockedSections.map((s) => s.class_nbr).join(","));
+      params.set(
+        "lockedClassNbrs",
+        lockedSections.map((s) => s.class_nbr).join(","),
+      );
     }
     return params;
-  }, [selectedTerm, courses, minRating, openOnly, timeStart, timeEnd, preferredDays, blockedSlots, lockedSections]);
+  }, [
+    selectedTerm,
+    courses,
+    minRating,
+    openOnly,
+    timeStart,
+    timeEnd,
+    preferredDays,
+    blockedSlots,
+    lockedSections,
+  ]);
 
   // ── Find Sections ─────────────────────────────────────────────────────────
   // Fetches raw section rows with current filters.
@@ -166,7 +202,9 @@ export default function Dashboard() {
     setIsSearching(true);
     setViewMode("sections");
     try {
-      const rows = await fetchJson<ScheduleRowProps[]>(`/api/schedule?${buildParams()}`);
+      const rows = await fetchJson<ScheduleRowProps[]>(
+        `/api/schedule?${buildParams()}`,
+      );
       setSections(rows);
       setHasSearched(true);
     } catch (e) {
@@ -184,7 +222,9 @@ export default function Dashboard() {
     setIsGenerating(true);
     setViewMode("schedules");
     try {
-      const scheds = await fetchJson<GeneratedSchedule[]>(`/api/generate?${buildParams()}`);
+      const scheds = await fetchJson<GeneratedSchedule[]>(
+        `/api/generate?${buildParams()}`,
+      );
       setGeneratedSchedules(scheds);
       setHasGenerated(true);
     } catch (e) {
@@ -246,11 +286,12 @@ export default function Dashboard() {
     }
   };
 
-  const removeCourse = (id: string) => setCourses((prev) => prev.filter((c) => c.id !== id));
+  const removeCourse = (id: string) =>
+    setCourses((prev) => prev.filter((c) => c.id !== id));
 
   const toggleDay = (day: string) =>
     setPreferredDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
     );
 
   // ── Reset filters ─────────────────────────────────────────────────────────
@@ -308,332 +349,444 @@ export default function Dashboard() {
     },
   ].filter(Boolean) as Chip[];
 
-  const canSearch    = !!selectedTerm && courses.length > 0;
+  const canSearch = !!selectedTerm && courses.length > 0;
   // Slider fill percentages power CSS linear-gradient tracks.
-  const sliderPct    = (minRating / 4) * 100;
+  const sliderPct = (minRating / 4) * 100;
   const gapSliderPct = (gapPreference / 60) * 100;
   // Default generated-schedule sort follows "days mode" preference.
-  const defaultSort  = daysMode === "minimize" ? "fewest-days" as const : "rating" as const;
+  const defaultSort =
+    daysMode === "minimize" ? ("fewest-days" as const) : ("rating" as const);
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
-
       {/* ── Mobile header ────────────────────────────────────────────── */}
       <header className="md:hidden flex items-center gap-3 px-4 h-14 bg-white border-b border-gray-200 sticky top-0 z-30 flex-shrink-0">
         <button
-          onClick={() => setSidebarOpen(prev => !prev)}
+          onClick={() => setSidebarOpen((prev) => !prev)}
           className="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
           aria-label={sidebarOpen ? "Close menu" : "Open menu"}
         >
           {sidebarOpen ? (
             /* X icon — tap again to close */
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           ) : (
             /* Hamburger icon */
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6h16M4 12h16M4 18h16"
+              />
             </svg>
           )}
         </button>
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 bg-green-600 rounded-md" />
-          <span className="text-sm font-bold text-gray-950 tracking-tight">Mustang Scheduler</span>
+          <span className="text-sm font-bold text-gray-950 tracking-tight">
+            Mustang Scheduler
+          </span>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-x-hidden">
+        {/* ── Sidebar backdrop ─────────────────────────────────────────── */}
+        {/* Mobile-only click target to dismiss the drawer. */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-x-0 top-14 bottom-0 z-30 bg-black/30 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
-      {/* ── Sidebar backdrop ─────────────────────────────────────────── */}
-      {/* Mobile-only click target to dismiss the drawer. */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-x-0 top-14 bottom-0 z-30 bg-black/30 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* ── Sidebar ──────────────────────────────────────────────────── */}
-      {/* top-14 on mobile = start below the 56px header so the drawer is never cut off.
+        {/* ── Sidebar ──────────────────────────────────────────────────── */}
+        {/* top-14 on mobile = start below the 56px header so the drawer is never cut off.
           md:top-0 + md:h-screen restores full-height sticky sidebar on desktop. */}
-      <aside className={`fixed md:sticky top-14 md:top-0 bottom-0 md:h-screen left-0 z-40 w-80 flex-shrink-0 border-r border-gray-200 overflow-y-auto bg-white transform transition-transform duration-300 ease-in-out md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="p-6">
-
-          {/* ── Term ──────────────────────────────────────────────── */}
-          <section className="mb-5">
-            <label className="sidebar-label">Term</label>
-            <div className="flex flex-col gap-1">
-              {terms.map((term) => (
-                <button
-                  key={term.code}
-                  onClick={() => setSelectedTerm(term)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                    selectedTerm?.code === term.code
-                      ? "bg-green-600 text-white"
-                      : "text-gray-700 hover:bg-gray-100"
-                  }`}
-                >
-                  {term.display}
-                </button>
-              ))}
-              {terms.length === 0 && <p className="text-gray-400 text-xs">Loading terms…</p>}
-            </div>
-          </section>
-
-          <hr className="border-gray-100 my-4" />
-
-          {/* ── Courses ───────────────────────────────────────────── */}
-          <section className="mb-5">
-            <label className="sidebar-label">Courses</label>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={currentCourse}
-                onChange={(e) => setCurrentCourse(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleCourseAdd()}
-                onPaste={handleCoursePaste}
-                placeholder='e.g. "CSC 101" or paste a list'
-                className="flex-1 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none
-                  placeholder:text-gray-400 focus:border-green-600 focus:ring-2 focus:ring-green-600/10 focus:bg-white"
-              />
+        <aside
+          className={`fixed md:sticky top-14 md:top-0 bottom-0 md:h-screen left-0 z-40 w-80 flex-shrink-0 border-r border-gray-200 overflow-y-auto bg-white transform transition-transform duration-300 ease-in-out md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+        >
+          <div className="p-6">
+            {/* Wordmark */}
+            <div className="hidden md:flex items-center justify-between mb-8">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 bg-green-600 rounded-md" />
+                <span className="text-base font-bold text-gray-950 tracking-tight">
+                  Mustang Scheduler
+                </span>
+              </div>
               <button
-                onClick={handleCourseAdd}
-                className="px-3 py-2 bg-gray-950 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
+                onClick={() => setSidebarOpen(false)}
+                className="md:hidden p-1 text-gray-400 hover:text-gray-700 text-lg leading-none cursor-pointer"
+                aria-label="Close menu"
               >
-                Add
+                ✕
               </button>
             </div>
-            <p className="text-[10px] text-gray-400 mb-2">
-              Tip: paste "CSC 101, MATH 142, CPE 202" to add multiple at once
-            </p>
-            <div className="flex flex-col gap-1">
-              {courses.map((course) => (
-                <div key={course.id} className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
-                  <span className="text-sm font-medium text-gray-800">{course.number}</span>
-                  <button onClick={() => removeCourse(course.id)} className="text-gray-400 hover:text-red-500 text-xs cursor-pointer">✕</button>
-                </div>
-              ))}
-              {courses.length === 0 && <p className="text-gray-400 text-xs mt-1">No courses added yet</p>}
-            </div>
-          </section>
 
-          {/* ── Locked sections ───────────────────────────────────── */}
-          {lockedSections.length > 0 && (
-            <>
-              <hr className="border-gray-100 my-4" />
-              <section className="mb-5">
-                <label className="sidebar-label">Locked Sections</label>
-                <div className="flex flex-col gap-1">
-                  {lockedSections.map((s) => (
-                    <div key={s.class_nbr} className="flex items-center justify-between px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
-                      <span className="text-xs font-medium text-green-800">📌 {s.label}</span>
-                      <button
-                        onClick={() => setLockedSections((prev) => prev.filter((l) => l.class_nbr !== s.class_nbr))}
-                        className="text-green-500 hover:text-red-500 text-xs ml-2 cursor-pointer"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            </>
-          )}
-
-          <hr className="border-gray-100 my-4" />
-
-          {/* ── Min Rating ────────────────────────────────────────── */}
-          <section className="mb-5">
-            <div className="flex justify-between items-center mb-2">
-              <label className="sidebar-label mb-0">Min Rating</label>
-              <span className="text-sm font-bold text-gray-950">
-                {minRating.toFixed(1)}
-                <span className="text-gray-400 font-normal"> / 4.0</span>
-              </span>
-            </div>
-            <input
-              type="range" min="0" max="4" step="0.1" value={minRating}
-              onChange={(e) => setMinRating(Number(e.target.value))}
-              className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer slider"
-              style={{ background: `linear-gradient(to right, #16a34a ${sliderPct}%, #e5e7eb ${sliderPct}%)` }}
-            />
-            <div className="flex justify-between mt-1 text-[10px] text-gray-400">
-              <span>Any</span><span>Excellent</span>
-            </div>
-          </section>
-
-          <hr className="border-gray-100 my-4" />
-
-          {/* ── Open sections only ────────────────────────────────── */}
-          <section className="mb-5">
-            <button
-              onClick={() => setOpenOnly((v) => !v)}
-              className="flex items-center justify-between w-full cursor-pointer"
-            >
-              <label className="sidebar-label mb-0 cursor-pointer">Open Sections Only</label>
-              <div className={`relative w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0 ${openOnly ? "bg-green-600" : "bg-gray-200"}`}>
-                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${openOnly ? "translate-x-4" : "translate-x-0.5"}`} />
+            {/* ── Term ──────────────────────────────────────────────── */}
+            <section className="mb-5">
+              <label className="sidebar-label">Term</label>
+              <div className="flex flex-col gap-1">
+                {terms.map((term) => (
+                  <button
+                    key={term.code}
+                    onClick={() => setSelectedTerm(term)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                      selectedTerm?.code === term.code
+                        ? "bg-green-600 text-white"
+                        : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    {term.display}
+                  </button>
+                ))}
+                {terms.length === 0 && (
+                  <p className="text-gray-400 text-xs">Loading terms…</p>
+                )}
               </div>
-            </button>
-            <p className="text-[10px] text-gray-400 mt-1">Hide sections with no available seats</p>
-          </section>
+            </section>
 
-          <hr className="border-gray-100 my-4" />
+            <hr className="border-gray-100 my-4" />
 
-          {/* ── Time Range ────────────────────────────────────────── */}
-          <section className="mb-5">
-            <label className="sidebar-label">Time Range</label>
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <span className="text-[10px] text-gray-400 mb-1 block">Start</span>
-                <input type="time" value={timeStart} onChange={(e) => setTimeStart(e.target.value)}
-                  className="w-full px-2 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none focus:border-green-600" />
-              </div>
-              <div className="flex-1">
-                <span className="text-[10px] text-gray-400 mb-1 block">End</span>
-                <input type="time" value={timeEnd} onChange={(e) => setTimeEnd(e.target.value)}
-                  className="w-full px-2 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none focus:border-green-600" />
-              </div>
-            </div>
-          </section>
-
-          <hr className="border-gray-100 my-4" />
-
-          {/* ── Days preference ───────────────────────────────────── */}
-          <section className="mb-5">
-            <label className="sidebar-label">Preferred Days</label>
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {DAYS_OF_WEEK.map((day) => (
-                <button key={day} onClick={() => toggleDay(day)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    preferredDays.includes(day)
-                      ? "bg-green-600 text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  {day.slice(0, 3)}
-                </button>
-              ))}
-            </div>
-
-            {/* Days on campus mode */}
-            {/* This currently changes default sort behavior client-side. */}
-            <label className="sidebar-label">Days on Campus</label>
-            <div className="flex rounded-lg overflow-hidden border border-gray-200">
-              {(["balanced", "minimize"] as const).map((mode) => (
+            {/* ── Courses ───────────────────────────────────────────── */}
+            <section className="mb-5">
+              <label className="sidebar-label">Courses</label>
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="text"
+                  value={currentCourse}
+                  onChange={(e) => setCurrentCourse(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCourseAdd()}
+                  onPaste={handleCoursePaste}
+                  placeholder='e.g. "CSC 101" or paste a list'
+                  className="flex-1 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none
+                  placeholder:text-gray-400 focus:border-green-600 focus:ring-2 focus:ring-green-600/10 focus:bg-white"
+                />
                 <button
-                  key={mode}
-                  onClick={() => setDaysMode(mode)}
-                  className={`flex-1 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                    daysMode === mode ? "bg-gray-950 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
-                  }`}
+                  onClick={handleCourseAdd}
+                  className="px-3 py-2 bg-gray-950 hover:bg-green-600 text-white text-sm font-medium rounded-lg transition-colors cursor-pointer"
                 >
-                  {mode === "balanced" ? "Balanced" : "Minimize"}
+                  Add
                 </button>
-              ))}
-            </div>
-          </section>
-
-          <hr className="border-gray-100 my-4" />
-
-          {/* ── Gap preference ────────────────────────────────────── */}
-          <section className="mb-5">
-            <div className="flex justify-between items-center mb-2">
-              <label className="sidebar-label mb-0">Gap Preference</label>
-              <span className="text-xs text-gray-500">
-                {gapPreference === 0 ? "Compact" : `~${gapPreference}min`}
-              </span>
-            </div>
-            <input
-              type="range" min="0" max="60" step="15" value={gapPreference}
-              onChange={(e) => setGapPreference(Number(e.target.value))}
-              className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer slider"
-              style={{ background: `linear-gradient(to right, #16a34a ${gapSliderPct}%, #e5e7eb ${gapSliderPct}%)` }}
-            />
-            <div className="flex justify-between mt-1 text-[10px] text-gray-400">
-              <span>Compact</span><span>Spread out</span>
-            </div>
-          </section>
-
-          <hr className="border-gray-100 my-4" />
-
-          {/* ── Blocked times ─────────────────────────────────────── */}
-          <section className="mb-5">
-            <button
-              onClick={() => setShowBlockGrid((v) => !v)}
-              className="sidebar-label flex items-center justify-between w-full cursor-pointer hover:text-gray-700"
-            >
-              <span>Blocked Times {blockedSlots.length > 0 ? `(${blockedSlots.length})` : ""}</span>
-              <span className="text-gray-300 text-xs">{showBlockGrid ? "▲" : "▼"}</span>
-            </button>
-            {showBlockGrid && (
-              <div className="mt-2">
-                <WeekBlockGrid value={blockedSlots} onChange={setBlockedSlots} />
               </div>
+              <p className="text-[10px] text-gray-400 mb-2">
+                Tip: paste "CSC 101, MATH 142, CPE 202" to add multiple at once
+              </p>
+              <div className="flex flex-col gap-1">
+                {courses.map((course) => (
+                  <div
+                    key={course.id}
+                    className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg"
+                  >
+                    <span className="text-sm font-medium text-gray-800">
+                      {course.number}
+                    </span>
+                    <button
+                      onClick={() => removeCourse(course.id)}
+                      className="text-gray-400 hover:text-red-500 text-xs cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {courses.length === 0 && (
+                  <p className="text-gray-400 text-xs mt-1">
+                    No courses added yet
+                  </p>
+                )}
+              </div>
+            </section>
+
+            {/* ── Locked sections ───────────────────────────────────── */}
+            {lockedSections.length > 0 && (
+              <>
+                <hr className="border-gray-100 my-4" />
+                <section className="mb-5">
+                  <label className="sidebar-label">Locked Sections</label>
+                  <div className="flex flex-col gap-1">
+                    {lockedSections.map((s) => (
+                      <div
+                        key={s.class_nbr}
+                        className="flex items-center justify-between px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg"
+                      >
+                        <span className="text-xs font-medium text-green-800">
+                          📌 {s.label}
+                        </span>
+                        <button
+                          onClick={() =>
+                            setLockedSections((prev) =>
+                              prev.filter((l) => l.class_nbr !== s.class_nbr),
+                            )
+                          }
+                          className="text-green-500 hover:text-red-500 text-xs ml-2 cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </>
             )}
-          </section>
 
-          <hr className="border-gray-100 my-4" />
+            <hr className="border-gray-100 my-4" />
 
-          {/* ── Action buttons ────────────────────────────────────── */}
-          {/* "Find Sections" and "Generate Schedules" share filters but hit
+            {/* ── Min Rating ────────────────────────────────────────── */}
+            <section className="mb-5">
+              <div className="flex justify-between items-center mb-2">
+                <label className="sidebar-label mb-0">Min Rating</label>
+                <span className="text-sm font-bold text-gray-950">
+                  {minRating.toFixed(1)}
+                  <span className="text-gray-400 font-normal"> / 4.0</span>
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="4"
+                step="0.1"
+                value={minRating}
+                onChange={(e) => setMinRating(Number(e.target.value))}
+                className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer slider"
+                style={{
+                  background: `linear-gradient(to right, #16a34a ${sliderPct}%, #e5e7eb ${sliderPct}%)`,
+                }}
+              />
+              <div className="flex justify-between mt-1 text-[10px] text-gray-400">
+                <span>Any</span>
+                <span>Excellent</span>
+              </div>
+            </section>
+
+            <hr className="border-gray-100 my-4" />
+
+            {/* ── Open sections only ────────────────────────────────── */}
+            <section className="mb-5">
+              <button
+                onClick={() => setOpenOnly((v) => !v)}
+                className="flex items-center justify-between w-full cursor-pointer"
+              >
+                <label className="sidebar-label mb-0 cursor-pointer">
+                  Open Sections Only
+                </label>
+                <div
+                  className={`relative w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0 ${openOnly ? "bg-green-600" : "bg-gray-200"}`}
+                >
+                  <div
+                    className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${openOnly ? "translate-x-4" : "translate-x-0.5"}`}
+                  />
+                </div>
+              </button>
+              <p className="text-[10px] text-gray-400 mt-1">
+                Hide sections with no available seats
+              </p>
+            </section>
+
+            <hr className="border-gray-100 my-4" />
+
+            {/* ── Time Range ────────────────────────────────────────── */}
+            <section className="mb-5">
+              <label className="sidebar-label">Time Range</label>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <span className="text-[10px] text-gray-400 mb-1 block">
+                    Start
+                  </span>
+                  <input
+                    type="time"
+                    value={timeStart}
+                    onChange={(e) => setTimeStart(e.target.value)}
+                    className="w-full px-2 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none focus:border-green-600"
+                  />
+                </div>
+                <div className="flex-1">
+                  <span className="text-[10px] text-gray-400 mb-1 block">
+                    End
+                  </span>
+                  <input
+                    type="time"
+                    value={timeEnd}
+                    onChange={(e) => setTimeEnd(e.target.value)}
+                    className="w-full px-2 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none focus:border-green-600"
+                  />
+                </div>
+              </div>
+            </section>
+
+            <hr className="border-gray-100 my-4" />
+
+            {/* ── Days preference ───────────────────────────────────── */}
+            <section className="mb-5">
+              <label className="sidebar-label">Preferred Days</label>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {DAYS_OF_WEEK.map((day) => (
+                  <button
+                    key={day}
+                    onClick={() => toggleDay(day)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                      preferredDays.includes(day)
+                        ? "bg-green-600 text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {day.slice(0, 3)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Days on campus mode */}
+              {/* This currently changes default sort behavior client-side. */}
+              <label className="sidebar-label">Days on Campus</label>
+              <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                {(["balanced", "minimize"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setDaysMode(mode)}
+                    className={`flex-1 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                      daysMode === mode
+                        ? "bg-gray-950 text-white"
+                        : "bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    {mode === "balanced" ? "Balanced" : "Minimize"}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <hr className="border-gray-100 my-4" />
+
+            {/* ── Gap preference ────────────────────────────────────── */}
+            <section className="mb-5">
+              <div className="flex justify-between items-center mb-2">
+                <label className="sidebar-label mb-0">Gap Preference</label>
+                <span className="text-xs text-gray-500">
+                  {gapPreference === 0 ? "Compact" : `~${gapPreference}min`}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="60"
+                step="15"
+                value={gapPreference}
+                onChange={(e) => setGapPreference(Number(e.target.value))}
+                className="w-full h-1.5 appearance-none rounded-full outline-none cursor-pointer slider"
+                style={{
+                  background: `linear-gradient(to right, #16a34a ${gapSliderPct}%, #e5e7eb ${gapSliderPct}%)`,
+                }}
+              />
+              <div className="flex justify-between mt-1 text-[10px] text-gray-400">
+                <span>Compact</span>
+                <span>Spread out</span>
+              </div>
+            </section>
+
+            <hr className="border-gray-100 my-4" />
+
+            {/* ── Blocked times ─────────────────────────────────────── */}
+            <section className="mb-5">
+              <button
+                onClick={() => setShowBlockGrid((v) => !v)}
+                className="sidebar-label flex items-center justify-between w-full cursor-pointer hover:text-gray-700"
+              >
+                <span>
+                  Blocked Times{" "}
+                  {blockedSlots.length > 0 ? `(${blockedSlots.length})` : ""}
+                </span>
+                <span className="text-gray-300 text-xs">
+                  {showBlockGrid ? "▲" : "▼"}
+                </span>
+              </button>
+              {showBlockGrid && (
+                <div className="mt-2">
+                  <WeekBlockGrid
+                    value={blockedSlots}
+                    onChange={setBlockedSlots}
+                  />
+                </div>
+              )}
+            </section>
+
+            <hr className="border-gray-100 my-4" />
+
+            {/* ── Action buttons ────────────────────────────────────── */}
+            {/* "Find Sections" and "Generate Schedules" share filters but hit
               different backend endpoints for different result types. */}
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={handleFindSections}
-              disabled={!canSearch || isSearching}
-              className={`w-full py-2.5 text-sm font-semibold rounded-xl transition-all cursor-pointer
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleFindSections}
+                disabled={!canSearch || isSearching}
+                className={`w-full py-2.5 text-sm font-semibold rounded-xl transition-all cursor-pointer
                 bg-gray-100 hover:bg-gray-200 text-gray-800
                 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100
                 ${viewMode === "sections" && hasSearched ? "ring-2 ring-green-600 ring-offset-1" : ""}
               `}
-            >
-              {isSearching
-                ? <span className="flex items-center justify-center gap-2">
+              >
+                {isSearching ? (
+                  <span className="flex items-center justify-center gap-2">
                     <span className="w-3.5 h-3.5 border-2 border-gray-400/30 border-t-gray-500 rounded-full animate-spin" />
                     Searching…
                   </span>
-                : "Find Sections"
-              }
-            </button>
+                ) : (
+                  "Find Sections"
+                )}
+              </button>
 
-            <button
-              onClick={handleGenerateSchedules}
-              disabled={!canSearch || isGenerating}
-              className={`w-full py-2.5 bg-gray-950 hover:bg-green-600 text-white text-sm font-semibold rounded-xl
+              <button
+                onClick={handleGenerateSchedules}
+                disabled={!canSearch || isGenerating}
+                className={`w-full py-2.5 bg-gray-950 hover:bg-green-600 text-white text-sm font-semibold rounded-xl
                 transition-all cursor-pointer hover:scale-[1.01] active:scale-[0.99]
                 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:bg-gray-950
                 ${viewMode === "schedules" && hasGenerated ? "ring-2 ring-green-600 ring-offset-1" : ""}
               `}
-            >
-              {isGenerating
-                ? <span className="flex items-center justify-center gap-2">
+              >
+                {isGenerating ? (
+                  <span className="flex items-center justify-center gap-2">
                     <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Building…
                   </span>
-                : "Generate Schedules ✦"
-              }
-            </button>
+                ) : (
+                  "Generate Schedules ✦"
+                )}
+              </button>
 
-            {!canSearch && (
-              <p className="text-gray-400 text-[10px] text-center mt-1">
-                Select a term and add a course first
-              </p>
-            )}
+              {!canSearch && (
+                <p className="text-gray-400 text-[10px] text-center mt-1">
+                  Select a term and add a course first
+                </p>
+              )}
 
-            {/* Reset */}
-            <button
-              onClick={resetFilters}
-              className="text-[10px] text-gray-400 hover:text-gray-600 underline underline-offset-2 text-center mt-1 cursor-pointer"
-            >
-              ↺ Reset filters
-            </button>
+              {/* Reset */}
+              <button
+                onClick={resetFilters}
+                className="text-[10px] text-gray-400 hover:text-gray-600 underline underline-offset-2 text-center mt-1 cursor-pointer"
+              >
+                ↺ Reset filters
+              </button>
+            </div>
           </div>
-        </div>
 
-        {/* Slider thumb styles */}
-        <style>{`
+          {/* Slider thumb styles */}
+          <style>{`
           .sidebar-label {
             display: block;
             font-size: 0.65rem;
@@ -657,69 +810,73 @@ export default function Dashboard() {
             box-shadow: 0 1px 3px rgba(0,0,0,0.2);
           }
         `}</style>
-      </aside>
+        </aside>
 
-      {/* ── Main area ────────────────────────────────────────────────── */}
-      {/* pointer-events-none + overflow-hidden when drawer is open: prevents scroll and interaction
+        {/* ── Main area ────────────────────────────────────────────────── */}
+        {/* pointer-events-none + overflow-hidden when drawer is open: prevents scroll and interaction
           behind the backdrop without any body-level hacks. */}
-      <main className={`flex-1 p-4 md:p-8 bg-gray-50 ${sidebarOpen ? "overflow-hidden pointer-events-none" : "overflow-y-auto"}`}>
-        {/* Active filter chips */}
-        {/* Quick visibility into active constraints + one-click removal. */}
-        {activeChips.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-6">
-            {activeChips.map((chip, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-medium
+        <main
+          className={`flex-1 p-4 md:p-8 bg-gray-50 ${sidebarOpen ? "overflow-hidden pointer-events-none" : "overflow-y-auto"}`}
+        >
+          {/* Active filter chips */}
+          {/* Quick visibility into active constraints + one-click removal. */}
+          {activeChips.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-6">
+              {activeChips.map((chip, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-medium
                   bg-gray-100 text-gray-700 border border-gray-200"
-              >
-                {chip.label}
-                <button
-                  onClick={chip.onRemove}
-                  className="text-gray-400 hover:text-gray-700 leading-none cursor-pointer"
-                  aria-label={`Remove filter: ${chip.label}`}
                 >
-                  ✕
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
+                  {chip.label}
+                  <button
+                    onClick={chip.onRemove}
+                    className="text-gray-400 hover:text-gray-700 leading-none cursor-pointer"
+                    aria-label={`Remove filter: ${chip.label}`}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
 
-        {/* Progress overlay for schedule generation */}
-        {isGenerating && viewMode === "schedules" && (
-          <div className="flex flex-col items-center justify-center min-h-[60vh]">
-            <div className="w-8 h-8 border-2 border-gray-200 border-t-green-600 rounded-full animate-spin mb-5" />
-            <p className="text-gray-950 font-semibold text-base mb-1">Building schedules…</p>
-            <p className="text-gray-400 text-sm">
-              Checking ~{progressCount.toLocaleString()} combinations
-            </p>
-          </div>
-        )}
+          {/* Progress overlay for schedule generation */}
+          {isGenerating && viewMode === "schedules" && (
+            <div className="flex flex-col items-center justify-center min-h-[60vh]">
+              <div className="w-8 h-8 border-2 border-gray-200 border-t-green-600 rounded-full animate-spin mb-5" />
+              <p className="text-gray-950 font-semibold text-base mb-1">
+                Building schedules…
+              </p>
+              <p className="text-gray-400 text-sm">
+                Checking ~{progressCount.toLocaleString()} combinations
+              </p>
+            </div>
+          )}
 
-        {/* Section results */}
-        {/* Renders only when not generating and in section view. */}
-        {!isGenerating && viewMode === "sections" && (
-          <ClassResultsPanel
-            results={sections}
-            hasSearched={hasSearched}
-            lockedClassNbrs={lockedClassNbrs}
-            onLock={handleLock}
-          />
-        )}
+          {/* Section results */}
+          {/* Renders only when not generating and in section view. */}
+          {!isGenerating && viewMode === "sections" && (
+            <ClassResultsPanel
+              results={sections}
+              hasSearched={hasSearched}
+              lockedClassNbrs={lockedClassNbrs}
+              onLock={handleLock}
+            />
+          )}
 
-        {/* Generated schedule results */}
-        {/* Renders only when not generating and in generated view. */}
-        {!isGenerating && viewMode === "schedules" && (
-          <GeneratedSchedulesPanel
-            schedules={generatedSchedules}
-            hasGenerated={hasGenerated}
-            defaultSort={defaultSort}
-            onLock={handleLock}
-            lockedClassNbrs={lockedClassNbrs}
-          />
-        )}
-      </main>
+          {/* Generated schedule results */}
+          {/* Renders only when not generating and in generated view. */}
+          {!isGenerating && viewMode === "schedules" && (
+            <GeneratedSchedulesPanel
+              schedules={generatedSchedules}
+              hasGenerated={hasGenerated}
+              defaultSort={defaultSort}
+              onLock={handleLock}
+              lockedClassNbrs={lockedClassNbrs}
+            />
+          )}
+        </main>
       </div>
     </div>
   );
