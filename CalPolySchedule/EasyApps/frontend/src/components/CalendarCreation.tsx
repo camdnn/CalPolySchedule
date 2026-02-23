@@ -92,6 +92,38 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<ViewMode>("sections");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // On mobile, open the sidebar by default so filters are immediately visible.
+  useEffect(() => {
+    if (window.innerWidth < 768) setSidebarOpen(true);
+  }, []);
+
+  // iOS-safe body scroll lock: plain overflow:hidden is ignored by Mobile Safari.
+  // position:fixed on <body> prevents rubber-band scroll behind the drawer.
+  useEffect(() => {
+    if (window.innerWidth >= 768) return; // desktop sidebar is always visible — no lock needed
+    if (sidebarOpen) {
+      const scrollY = window.scrollY;
+      document.body.style.overflow = "hidden";
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = "100%";
+    } else {
+      const top = document.body.style.top;
+      document.body.style.position = "";
+      document.body.style.overflow = "";
+      document.body.style.top = "";
+      document.body.style.width = "";
+      if (top) window.scrollTo(0, -parseInt(top, 10)); // restore scroll position
+    }
+    return () => {
+      // Cleanup on unmount — ensure body is never left locked.
+      document.body.style.position = "";
+      document.body.style.overflow = "";
+      document.body.style.top = "";
+      document.body.style.width = "";
+    };
+  }, [sidebarOpen]);
+
   // Load terms on mount
   // If backend returns terms sorted newest-first, first item becomes default.
   useEffect(() => {
@@ -327,13 +359,15 @@ export default function Dashboard() {
       {/* Mobile-only click target to dismiss the drawer. */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/30 md:hidden"
+          className="fixed inset-x-0 top-14 bottom-0 z-30 bg-black/30 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* ── Sidebar ──────────────────────────────────────────────────── */}
-      <aside className={`fixed md:sticky top-0 inset-y-0 left-0 z-40 w-80 flex-shrink-0 border-r border-gray-200 h-screen overflow-y-auto bg-white transform transition-transform duration-300 ease-in-out md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      {/* top-14 on mobile = start below the 56px header so the drawer is never cut off.
+          md:top-0 + md:h-screen restores full-height sticky sidebar on desktop. */}
+      <aside className={`fixed md:sticky top-14 md:top-0 bottom-0 md:h-screen left-0 z-40 w-80 flex-shrink-0 border-r border-gray-200 overflow-y-auto bg-white transform transition-transform duration-300 ease-in-out md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="p-6">
           {/* Wordmark */}
           <div className="flex items-center justify-between mb-8">
