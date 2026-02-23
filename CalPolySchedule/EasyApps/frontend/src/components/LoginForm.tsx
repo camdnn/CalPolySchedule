@@ -53,7 +53,7 @@ export default function LoginForm({ isLoggedIn, setIsLoggedIn }: LoginFormProps)
             autoFocus
             className="
               w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl
-              text-gray-950 text-sm outline-none transition-all duration-200
+              text-gray-950 text-base outline-none transition-all duration-200
               placeholder:text-gray-400
               focus:border-green-600 focus:ring-2 focus:ring-green-600/10 focus:bg-white
             "

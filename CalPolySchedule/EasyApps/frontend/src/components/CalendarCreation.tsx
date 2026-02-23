@@ -97,31 +97,13 @@ export default function Dashboard() {
     if (window.innerWidth < 768) setSidebarOpen(true);
   }, []);
 
-  // iOS-safe body scroll lock: plain overflow:hidden is ignored by Mobile Safari.
-  // position:fixed on <body> prevents rubber-band scroll behind the drawer.
+  // Prevent background scroll while the mobile drawer is open.
+  // Setting overflow:hidden on <html> is sufficient — the body's min-h-screen is
+  // exactly the viewport, so the only real scroll is inside <main> (handled below).
   useEffect(() => {
-    if (window.innerWidth >= 768) return; // desktop sidebar is always visible — no lock needed
-    if (sidebarOpen) {
-      const scrollY = window.scrollY;
-      document.body.style.overflow = "hidden";
-      document.body.style.position = "fixed";
-      document.body.style.top = `-${scrollY}px`;
-      document.body.style.width = "100%";
-    } else {
-      const top = document.body.style.top;
-      document.body.style.position = "";
-      document.body.style.overflow = "";
-      document.body.style.top = "";
-      document.body.style.width = "";
-      if (top) window.scrollTo(0, -parseInt(top, 10)); // restore scroll position
-    }
-    return () => {
-      // Cleanup on unmount — ensure body is never left locked.
-      document.body.style.position = "";
-      document.body.style.overflow = "";
-      document.body.style.top = "";
-      document.body.style.width = "";
-    };
+    if (window.innerWidth >= 768) return;
+    document.documentElement.style.overflow = sidebarOpen ? "hidden" : "";
+    return () => { document.documentElement.style.overflow = ""; };
   }, [sidebarOpen]);
 
   // Load terms on mount
@@ -334,18 +316,26 @@ export default function Dashboard() {
   const defaultSort  = daysMode === "minimize" ? "fewest-days" as const : "rating" as const;
 
   return (
-    <div className="min-h-screen bg-white flex flex-col overflow-x-hidden">
+    <div className="min-h-screen bg-white flex flex-col">
 
       {/* ── Mobile header ────────────────────────────────────────────── */}
       <header className="md:hidden flex items-center gap-3 px-4 h-14 bg-white border-b border-gray-200 sticky top-0 z-30 flex-shrink-0">
         <button
-          onClick={() => setSidebarOpen(true)}
+          onClick={() => setSidebarOpen(prev => !prev)}
           className="p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
-          aria-label="Open menu"
+          aria-label={sidebarOpen ? "Close menu" : "Open menu"}
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
+          {sidebarOpen ? (
+            /* X icon — tap again to close */
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          ) : (
+            /* Hamburger icon */
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          )}
         </button>
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 bg-green-600 rounded-md" />
@@ -353,7 +343,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="flex flex-1">
+      <div className="flex flex-1 overflow-x-hidden">
 
       {/* ── Sidebar backdrop ─────────────────────────────────────────── */}
       {/* Mobile-only click target to dismiss the drawer. */}
@@ -682,7 +672,9 @@ export default function Dashboard() {
       </aside>
 
       {/* ── Main area ────────────────────────────────────────────────── */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto bg-gray-50 min-h-screen">
+      {/* pointer-events-none + overflow-hidden when drawer is open: prevents scroll and interaction
+          behind the backdrop without any body-level hacks. */}
+      <main className={`flex-1 p-4 md:p-8 bg-gray-50 ${sidebarOpen ? "overflow-hidden pointer-events-none" : "overflow-y-auto"}`}>
         {/* Active filter chips */}
         {/* Quick visibility into active constraints + one-click removal. */}
         {activeChips.length > 0 && (
