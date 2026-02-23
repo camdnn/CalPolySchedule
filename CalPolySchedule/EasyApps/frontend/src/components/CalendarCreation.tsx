@@ -359,18 +359,6 @@ export default function Dashboard() {
           md:top-0 + md:h-screen restores full-height sticky sidebar on desktop. */}
       <aside className={`fixed md:sticky top-14 md:top-0 bottom-0 md:h-screen left-0 z-40 w-80 flex-shrink-0 border-r border-gray-200 overflow-y-auto bg-white transform transition-transform duration-300 ease-in-out md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="p-6">
-          {/* Wordmark */}
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 bg-green-600 rounded-md" />
-              <span className="text-base font-bold text-gray-950 tracking-tight">Mustang Scheduler</span>
-            </div>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="md:hidden p-1 text-gray-400 hover:text-gray-700 text-lg leading-none cursor-pointer"
-              aria-label="Close menu"
-            >✕</button>
-          </div>
 
           {/* ── Term ──────────────────────────────────────────────── */}
           <section className="mb-5">
