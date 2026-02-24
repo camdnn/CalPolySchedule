@@ -1,14 +1,23 @@
 import { useState, useEffect, useRef } from "react";
-import type { GeneratedSchedule, ScheduleRowProps } from "../props/CaldendarProps.ts";
+import type {
+  GeneratedSchedule,
+  ScheduleRowProps,
+} from "../props/CaldendarProps.ts";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const GRID_START = 7;   // 7 AM
-const GRID_END   = 21;  // 9 PM
-const TOTAL_MIN  = (GRID_END - GRID_START) * 60;
-const GRID_H     = 260; // px
+const GRID_START = 7; // 7 AM
+const GRID_END = 21; // 9 PM
+const TOTAL_MIN = (GRID_END - GRID_START) * 60;
+const GRID_H = 260; // px
 
-const DAYS      = ["M", "T", "W", "R", "F"] as const;
-const DAY_LABEL: Record<string, string> = { M: "Mon", T: "Tue", W: "Wed", R: "Thu", F: "Fri" };
+const DAYS = ["M", "T", "W", "R", "F"] as const;
+const DAY_LABEL: Record<string, string> = {
+  M: "Mon",
+  T: "Tue",
+  W: "Wed",
+  R: "Thu",
+  F: "Fri",
+};
 
 const COURSE_COLORS = [
   "bg-blue-500",
@@ -20,14 +29,19 @@ const COURSE_COLORS = [
 ];
 
 // ── Sort types ────────────────────────────────────────────────────────────────
-type SortMode = "rating" | "compact" | "fewest-days" | "earliest-start" | "latest-end";
+type SortMode =
+  | "rating"
+  | "compact"
+  | "fewest-days"
+  | "earliest-start"
+  | "latest-end";
 
 const SORT_OPTIONS: { key: SortMode; label: string }[] = [
-  { key: "rating",         label: "★ Best rating"    },
-  { key: "compact",        label: "Compact day"      },
-  { key: "fewest-days",    label: "Fewest days"      },
-  { key: "earliest-start", label: "Early start"      },
-  { key: "latest-end",     label: "Late end"         },
+  { key: "rating", label: "★ Best rating" },
+  { key: "compact", label: "Compact day" },
+  { key: "fewest-days", label: "Fewest days" },
+  { key: "earliest-start", label: "Early start" },
+  { key: "latest-end", label: "Late end" },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -47,14 +61,17 @@ function formatTime(t: string | null): string {
 // Translate compact day codes from API (`MWF`) into readable labels.
 function formatDays(d: string | null): string {
   if (!d) return "TBD";
-  return d.split("").map((ch) => DAY_LABEL[ch] ?? ch).join(" · ");
+  return d
+    .split("")
+    .map((ch) => DAY_LABEL[ch] ?? ch)
+    .join(" · ");
 }
 
 // Shared color system for ratings (used in list text).
 function ratingColor(r: number | null): string {
   if (r === null) return "text-gray-400";
-  if (r >= 4.0) return "text-green-600";
-  if (r >= 3.0) return "text-yellow-500";
+  if (r >= 3.0) return "text-green-600";
+  if (r >= 2.0) return "text-yellow-500";
   return "text-red-500";
 }
 
@@ -68,18 +85,27 @@ function ratingBadge(r: number | null): string {
 
 // Schedule-level metrics used for sorting controls.
 function getEarliestStart(s: GeneratedSchedule): string {
-  return s.sections.reduce((min, sec) =>
-    sec.start_time && (!min || sec.start_time < min) ? sec.start_time : min, "");
+  return s.sections.reduce(
+    (min, sec) =>
+      sec.start_time && (!min || sec.start_time < min) ? sec.start_time : min,
+    "",
+  );
 }
 
 function getLatestEnd(s: GeneratedSchedule): string {
-  return s.sections.reduce((max, sec) =>
-    sec.end_time && (!max || sec.end_time > max) ? sec.end_time : max, "");
+  return s.sections.reduce(
+    (max, sec) =>
+      sec.end_time && (!max || sec.end_time > max) ? sec.end_time : max,
+    "",
+  );
 }
 
 // Non-mutating sort helper; we always copy before sorting so caller data
 // remains untouched and React state remains predictable.
-function sortSchedules(list: GeneratedSchedule[], mode: SortMode): GeneratedSchedule[] {
+function sortSchedules(
+  list: GeneratedSchedule[],
+  mode: SortMode,
+): GeneratedSchedule[] {
   const copy = [...list];
   switch (mode) {
     case "rating":
@@ -92,22 +118,31 @@ function sortSchedules(list: GeneratedSchedule[], mode: SortMode): GeneratedSche
       return copy.sort((a, b) => a.totalGap - b.totalGap);
     case "fewest-days":
       return copy.sort((a, b) => {
-        if (a.daysOnCampus !== b.daysOnCampus) return a.daysOnCampus - b.daysOnCampus;
+        if (a.daysOnCampus !== b.daysOnCampus)
+          return a.daysOnCampus - b.daysOnCampus;
         if (a.avgRating === null) return 1;
         if (b.avgRating === null) return -1;
         return b.avgRating - a.avgRating;
       });
     case "earliest-start":
-      return copy.sort((a, b) => getEarliestStart(a).localeCompare(getEarliestStart(b)));
+      return copy.sort((a, b) =>
+        getEarliestStart(a).localeCompare(getEarliestStart(b)),
+      );
     case "latest-end":
-      return copy.sort((a, b) => getLatestEnd(b).localeCompare(getLatestEnd(a)));
+      return copy.sort((a, b) =>
+        getLatestEnd(b).localeCompare(getLatestEnd(a)),
+      );
   }
 }
 
 // Assign stable colors by course key so all schedule cards/grid blocks match.
 function courseColorMap(sections: ScheduleRowProps[]): Map<string, string> {
-  const keys = [...new Set(sections.map((s) => `${s.subject} ${s.catalog_nbr}`))];
-  return new Map(keys.map((k, i) => [k, COURSE_COLORS[i % COURSE_COLORS.length]]));
+  const keys = [
+    ...new Set(sections.map((s) => `${s.subject} ${s.catalog_nbr}`)),
+  ];
+  return new Map(
+    keys.map((k, i) => [k, COURSE_COLORS[i % COURSE_COLORS.length]]),
+  );
 }
 
 // ── Mini week grid ─────────────────────────────────────────────────────────────
@@ -127,7 +162,10 @@ function WeekGrid({
       <div className="flex bg-gray-100 border-b border-gray-200">
         <div className="w-8 flex-shrink-0" />
         {DAYS.map((d) => (
-          <div key={d} className="flex-1 text-center text-[9px] font-semibold text-gray-500 py-1.5 tracking-wide uppercase">
+          <div
+            key={d}
+            className="flex-1 text-center text-[9px] font-semibold text-gray-500 py-1.5 tracking-wide uppercase"
+          >
             {DAY_LABEL[d]}
           </div>
         ))}
@@ -143,9 +181,13 @@ function WeekGrid({
               <div
                 key={i}
                 className="absolute right-1.5 text-[9px] font-medium text-gray-500 leading-none"
-                style={{ top: `${(i / hourCount) * 100}%`, transform: "translateY(-50%)" }}
+                style={{
+                  top: `${(i / hourCount) * 100}%`,
+                  transform: "translateY(-50%)",
+                }}
               >
-                {hour % 12 || 12}{hour < 12 ? "a" : "p"}
+                {hour % 12 || 12}
+                {hour < 12 ? "a" : "p"}
               </div>
             );
           })}
@@ -153,7 +195,10 @@ function WeekGrid({
 
         {/* Day columns */}
         {DAYS.map((day) => (
-          <div key={day} className="flex-1 relative border-l border-gray-200 bg-white">
+          <div
+            key={day}
+            className="flex-1 relative border-l border-gray-200 bg-white"
+          >
             {Array.from({ length: hourCount + 1 }, (_, i) => (
               <div
                 key={i}
@@ -162,15 +207,22 @@ function WeekGrid({
               />
             ))}
             {sections
-              .filter((s) => s.days?.includes(day) && s.start_time && s.end_time)
+              .filter(
+                (s) => s.days?.includes(day) && s.start_time && s.end_time,
+              )
               .map((s) => {
                 // Convert real clock times into percentages of display window
                 // so each block can be absolutely positioned in the column.
-                const startMin  = toMin(s.start_time!) - GRID_START * 60;
-                const endMin    = toMin(s.end_time!)   - GRID_START * 60;
-                const topPct    = Math.max(0, (startMin / TOTAL_MIN) * 100);
-                const heightPct = Math.max(1, ((endMin - startMin) / TOTAL_MIN) * 100);
-                const color     = colorMap.get(`${s.subject} ${s.catalog_nbr}`) ?? "bg-gray-400";
+                const startMin = toMin(s.start_time!) - GRID_START * 60;
+                const endMin = toMin(s.end_time!) - GRID_START * 60;
+                const topPct = Math.max(0, (startMin / TOTAL_MIN) * 100);
+                const heightPct = Math.max(
+                  1,
+                  ((endMin - startMin) / TOTAL_MIN) * 100,
+                );
+                const color =
+                  colorMap.get(`${s.subject} ${s.catalog_nbr}`) ??
+                  "bg-gray-400";
                 return (
                   <div
                     key={`${s.class_nbr}-${day}`}
@@ -180,7 +232,8 @@ function WeekGrid({
                       height: `${heightPct}%`,
                       left: "3px",
                       right: "3px",
-                      boxShadow: "0 2px 6px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.2)",
+                      boxShadow:
+                        "0 2px 6px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.2)",
                     }}
                   >
                     <span>{s.subject}</span>
@@ -214,11 +267,15 @@ function CompareDrawer({
   const cmB = courseColorMap(scheduleB.sections);
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 bg-white border-t border-gray-200 shadow-2xl flex flex-col"
-      style={{ height: "62vh" }}>
+    <div
+      className="fixed inset-x-0 bottom-0 z-50 bg-white border-t border-gray-200 shadow-2xl flex flex-col"
+      style={{ height: "62vh" }}
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100 flex-shrink-0">
-        <h3 className="text-sm font-semibold text-gray-950">Comparing Schedules</h3>
+        <h3 className="text-sm font-semibold text-gray-950">
+          Comparing Schedules
+        </h3>
         <button
           onClick={onClose}
           className="text-gray-400 hover:text-gray-700 text-lg leading-none cursor-pointer"
@@ -230,60 +287,84 @@ function CompareDrawer({
 
       {/* Side-by-side on desktop, stacked on mobile */}
       <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden divide-y md:divide-y-0 md:divide-x divide-gray-100">
-        {([{ sched: scheduleA, cm: cmA, idx: idxA }, { sched: scheduleB, cm: cmB, idx: idxB }] as const).map(
-          ({ sched, cm, idx }) => (
-            <div key={idx} className="flex-1 flex flex-col overflow-y-auto p-4">
-              {/* Card header */}
-              <div className="flex items-center justify-between mb-3 flex-shrink-0">
-                <div>
-                  <p className="text-sm font-bold text-gray-950">Schedule {idx + 1}</p>
-                  <p className="text-xs text-gray-400">
-                    {sched.daysOnCampus} day{sched.daysOnCampus !== 1 ? "s" : ""} on campus
-                    {" · "}
-                    {sched.totalGap === 0 ? "no gaps" : `${Math.round(sched.totalGap / 60 * 10) / 10}h gaps`}
-                  </p>
-                </div>
-                {sched.avgRating !== null ? (
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${ratingBadge(sched.avgRating)}`}>
-                    {sched.avgRating.toFixed(2)} ★
-                  </span>
-                ) : (
-                  <span className="text-xs text-gray-300 bg-gray-50 px-2.5 py-1 rounded-full">no ratings</span>
-                )}
+        {(
+          [
+            { sched: scheduleA, cm: cmA, idx: idxA },
+            { sched: scheduleB, cm: cmB, idx: idxB },
+          ] as const
+        ).map(({ sched, cm, idx }) => (
+          <div key={idx} className="flex-1 flex flex-col overflow-y-auto p-4">
+            {/* Card header */}
+            <div className="flex items-center justify-between mb-3 flex-shrink-0">
+              <div>
+                <p className="text-sm font-bold text-gray-950">
+                  Schedule {idx + 1}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {sched.daysOnCampus} day{sched.daysOnCampus !== 1 ? "s" : ""}{" "}
+                  on campus
+                  {" · "}
+                  {sched.totalGap === 0
+                    ? "no gaps"
+                    : `${Math.round((sched.totalGap / 60) * 10) / 10}h gaps`}
+                </p>
               </div>
-
-              {/* Week grid */}
-              <WeekGrid sections={sched.sections} colorMap={cm} height={170} />
-
-              {/* Section list */}
-              <div className="mt-3 flex flex-col gap-1 flex-shrink-0">
-                {sched.sections.map((s) => {
-                  const r = s.overall_rating !== null ? Number(s.overall_rating) : null;
-                  const dot = cm.get(`${s.subject} ${s.catalog_nbr}`) ?? "bg-gray-400";
-                  return (
-                    <div key={`${s.class_nbr}-${s.class_section}`} className="flex items-center gap-2 text-xs">
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
-                      <span className="font-medium text-gray-800 w-16 flex-shrink-0">
-                        {s.subject} {s.catalog_nbr}
-                      </span>
-                      <span className="text-gray-500">
-                        {formatDays(s.days)}
-                        {s.start_time && s.end_time && (
-                          <> · {formatTime(s.start_time)}–{formatTime(s.end_time)}</>
-                        )}
-                      </span>
-                      {r !== null && (
-                        <span className={`ml-auto font-semibold ${ratingColor(r)}`}>
-                          {r.toFixed(1)}★
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              {sched.avgRating !== null ? (
+                <span
+                  className={`text-xs font-bold px-2.5 py-1 rounded-full ${ratingBadge(sched.avgRating)}`}
+                >
+                  {sched.avgRating.toFixed(2)} ★
+                </span>
+              ) : (
+                <span className="text-xs text-gray-300 bg-gray-50 px-2.5 py-1 rounded-full">
+                  no ratings
+                </span>
+              )}
             </div>
-          )
-        )}
+
+            {/* Week grid */}
+            <WeekGrid sections={sched.sections} colorMap={cm} height={170} />
+
+            {/* Section list */}
+            <div className="mt-3 flex flex-col gap-1 flex-shrink-0">
+              {sched.sections.map((s) => {
+                const r =
+                  s.overall_rating !== null ? Number(s.overall_rating) : null;
+                const dot =
+                  cm.get(`${s.subject} ${s.catalog_nbr}`) ?? "bg-gray-400";
+                return (
+                  <div
+                    key={`${s.class_nbr}-${s.class_section}`}
+                    className="flex items-center gap-2 text-xs"
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`}
+                    />
+                    <span className="font-medium text-gray-800 w-16 flex-shrink-0">
+                      {s.subject} {s.catalog_nbr}
+                    </span>
+                    <span className="text-gray-500">
+                      {formatDays(s.days)}
+                      {s.start_time && s.end_time && (
+                        <>
+                          {" "}
+                          · {formatTime(s.start_time)}–{formatTime(s.end_time)}
+                        </>
+                      )}
+                    </span>
+                    {r !== null && (
+                      <span
+                        className={`ml-auto font-semibold ${ratingColor(r)}`}
+                      >
+                        {r.toFixed(1)}★
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -309,13 +390,13 @@ export default function GeneratedSchedulesPanel({
   // `sortMode`: active ordering strategy for cards.
   // `compareMode`: whether checkboxes + drawer flow is active.
   // `compareSelected`: schedule indexes currently selected for comparison.
-  const [sortMode, setSortMode]         = useState<SortMode>(defaultSort);
-  const [compareMode, setCompareMode]   = useState(false);
-  const [compareSelected, setCompare]   = useState<number[]>([]); // indices into sorted list
+  const [sortMode, setSortMode] = useState<SortMode>(defaultSort);
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareSelected, setCompare] = useState<number[]>([]); // indices into sorted list
   // Tracks which schedule cards have their class-number panel expanded.
   const [openNbrCards, setOpenNbrCards] = useState<Set<number>>(new Set());
   // Stores the most recently copied card index for temporary success feedback.
-  const [copiedIdx, setCopiedIdx]       = useState<number | null>(null);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
   // Reset compare + sort when new schedules arrive
   // This prevents stale compare selections referencing old result sets.
@@ -335,10 +416,12 @@ export default function GeneratedSchedulesPanel({
         <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-4">
           <div className="w-7 h-7 bg-green-600 rounded-md" />
         </div>
-        <p className="text-gray-950 font-semibold text-lg mb-1">Generate conflict-free schedules</p>
+        <p className="text-gray-950 font-semibold text-lg mb-1">
+          Generate conflict-free schedules
+        </p>
         <p className="text-gray-400 text-sm max-w-xs">
-          Add your courses and click "Generate Schedules" — we'll find every valid combination
-          sorted by professor rating.
+          Add your courses and click "Generate Schedules" — we'll find every
+          valid combination sorted by professor rating.
         </p>
       </div>
     );
@@ -347,10 +430,12 @@ export default function GeneratedSchedulesPanel({
   if (schedules.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <p className="text-gray-950 font-semibold text-lg mb-1">No valid schedules found</p>
+        <p className="text-gray-950 font-semibold text-lg mb-1">
+          No valid schedules found
+        </p>
         <p className="text-gray-400 text-sm max-w-xs">
-          All combinations have conflicts. Try widening filters, removing blocked times, or adding
-          different courses.
+          All combinations have conflicts. Try widening filters, removing
+          blocked times, or adding different courses.
         </p>
       </div>
     );
@@ -362,7 +447,8 @@ export default function GeneratedSchedulesPanel({
   function toggleNbrs(idx: number) {
     setOpenNbrCards((prev) => {
       const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
       return next;
     });
   }
@@ -402,33 +488,36 @@ export default function GeneratedSchedulesPanel({
         <div className="flex items-center gap-2 flex-wrap">
           {/* Sort pills */}
           <div className="overflow-x-auto max-w-full md:max-w-none">
-          <div
-            className="flex rounded-lg overflow-hidden border border-gray-200 min-w-max"
-            role="radiogroup"
-            aria-label="Sort schedules by"
-          >
-            {SORT_OPTIONS.map(({ key, label }) => (
-              <button
-                key={key}
-                role="radio"
-                aria-checked={sortMode === key}
-                onClick={() => setSortMode(key)}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                  sortMode === key
-                    ? "bg-gray-950 text-white"
-                    : "bg-white text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+            <div
+              className="flex rounded-lg overflow-hidden border border-gray-200 min-w-max"
+              role="radiogroup"
+              aria-label="Sort schedules by"
+            >
+              {SORT_OPTIONS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  role="radio"
+                  aria-checked={sortMode === key}
+                  onClick={() => setSortMode(key)}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                    sortMode === key
+                      ? "bg-gray-950 text-white"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Compare toggle */}
           {/* Turning compare off also clears selected schedule indexes. */}
           <button
-            onClick={() => { setCompareMode((m) => !m); setCompare([]); }}
+            onClick={() => {
+              setCompareMode((m) => !m);
+              setCompare([]);
+            }}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
               compareMode
                 ? "bg-gray-950 text-white border-gray-950"
@@ -442,13 +531,14 @@ export default function GeneratedSchedulesPanel({
 
       {compareMode && compareSelected.length < 2 && (
         <p className="text-gray-400 text-xs mb-4 text-center">
-          Select {2 - compareSelected.length} more schedule{2 - compareSelected.length !== 1 ? "s" : ""} to compare
+          Select {2 - compareSelected.length} more schedule
+          {2 - compareSelected.length !== 1 ? "s" : ""} to compare
         </p>
       )}
 
       {/* ── Schedule cards ─────────────────────────────────────────────── */}
       {sorted.map((sched, idx) => {
-        const cm       = courseColorMap(sched.sections);
+        const cm = courseColorMap(sched.sections);
         const courseKeys = [...cm.keys()];
         const isSelected = compareSelected.includes(idx);
 
@@ -476,10 +566,13 @@ export default function GeneratedSchedulesPanel({
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-gray-950">Schedule {idx + 1}</h3>
+                  <h3 className="text-base font-bold text-gray-950">
+                    Schedule {idx + 1}
+                  </h3>
                   {/* Metadata — inline on desktop, hidden on mobile (shown as subtitle below) */}
                   <span className="hidden md:inline text-xs text-gray-400">
-                    {sched.daysOnCampus} day{sched.daysOnCampus !== 1 ? "s" : ""}
+                    {sched.daysOnCampus} day
+                    {sched.daysOnCampus !== 1 ? "s" : ""}
                   </span>
                   {sched.totalGap > 0 && (
                     <span className="hidden md:inline text-xs text-gray-400">
@@ -487,23 +580,31 @@ export default function GeneratedSchedulesPanel({
                     </span>
                   )}
                   {sched.totalGap === 0 && (
-                    <span className="hidden md:inline text-xs text-green-600">· no gaps</span>
+                    <span className="hidden md:inline text-xs text-green-600">
+                      · no gaps
+                    </span>
                   )}
                 </div>
                 {/* Mobile-only subtitle: days · gaps on their own line */}
                 <p className="md:hidden text-xs text-gray-400 mt-0.5">
                   {sched.daysOnCampus} day{sched.daysOnCampus !== 1 ? "s" : ""}
-                  {sched.totalGap > 0 && ` · ${Math.round(sched.totalGap / 6) / 10}h gaps`}
-                  {sched.totalGap === 0 && <span className="text-green-600"> · no gaps</span>}
+                  {sched.totalGap > 0 &&
+                    ` · ${Math.round(sched.totalGap / 6) / 10}h gaps`}
+                  {sched.totalGap === 0 && (
+                    <span className="text-green-600"> · no gaps</span>
+                  )}
                 </p>
                 <p className="text-gray-400 text-xs mt-0.5">
-                  {sched.sections.length} section{sched.sections.length !== 1 ? "s" : ""}
+                  {sched.sections.length} section
+                  {sched.sections.length !== 1 ? "s" : ""}
                 </p>
               </div>
 
               {/* Avg rating badge */}
               {sched.avgRating !== null ? (
-                <span className={`text-xs md:text-sm font-bold px-2 md:px-3 py-0.5 md:py-1 rounded-full flex-shrink-0 ${ratingBadge(sched.avgRating)}`}>
+                <span
+                  className={`text-xs md:text-sm font-bold px-2 md:px-3 py-0.5 md:py-1 rounded-full flex-shrink-0 ${ratingBadge(sched.avgRating)}`}
+                >
                   {sched.avgRating.toFixed(2)} ★ avg
                 </span>
               ) : (
@@ -546,7 +647,10 @@ export default function GeneratedSchedulesPanel({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {sched.sections.map((s) => (
-                    <div key={s.class_nbr} className="flex flex-col items-center bg-white border border-gray-200 rounded-lg px-3 py-1.5 min-w-[64px]">
+                    <div
+                      key={s.class_nbr}
+                      className="flex flex-col items-center bg-white border border-gray-200 rounded-lg px-3 py-1.5 min-w-[64px]"
+                    >
                       <span className="text-[10px] text-gray-400 leading-none mb-0.5">
                         {s.subject} {s.catalog_nbr}
                       </span>
@@ -562,7 +666,10 @@ export default function GeneratedSchedulesPanel({
             {/* Course color legend */}
             <div className="px-4 md:px-6 pt-4 flex flex-wrap gap-2">
               {courseKeys.map((k) => (
-                <span key={k} className={`text-xs text-white font-semibold px-2.5 py-1 rounded-md ${cm.get(k)}`}>
+                <span
+                  key={k}
+                  className={`text-xs text-white font-semibold px-2.5 py-1 rounded-md ${cm.get(k)}`}
+                >
                   {k}
                 </span>
               ))}
@@ -573,15 +680,19 @@ export default function GeneratedSchedulesPanel({
                 the true collision/shape visualization. */}
             <div className="px-4 md:px-6 pt-3 pb-1 flex flex-col gap-2">
               {sched.sections.map((s) => {
-                const r     = s.overall_rating !== null ? Number(s.overall_rating) : null;
-                const dot   = cm.get(`${s.subject} ${s.catalog_nbr}`) ?? "bg-gray-400";
+                const r =
+                  s.overall_rating !== null ? Number(s.overall_rating) : null;
+                const dot =
+                  cm.get(`${s.subject} ${s.catalog_nbr}`) ?? "bg-gray-400";
                 const isLocked = lockedClassNbrs.has(String(s.class_nbr));
                 return (
                   <div
                     key={`${s.class_nbr}-${s.class_section}`}
                     className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm"
                   >
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+                    <span
+                      className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`}
+                    />
                     <span className="font-medium text-gray-800 flex-shrink-0">
                       {s.subject} {s.catalog_nbr}
                     </span>
@@ -592,7 +703,8 @@ export default function GeneratedSchedulesPanel({
                       {formatDays(s.days)}
                       {s.start_time && s.end_time && (
                         <span className="text-gray-400">
-                          {" · "}{formatTime(s.start_time)}–{formatTime(s.end_time)}
+                          {" · "}
+                          {formatTime(s.start_time)}–{formatTime(s.end_time)}
                         </span>
                       )}
                     </span>
@@ -602,7 +714,12 @@ export default function GeneratedSchedulesPanel({
                         {r !== null && (
                           <span className={`font-semibold ${ratingColor(r)}`}>
                             {r.toFixed(1)}★
-                            {s.num_evals ? <span className="text-gray-300 font-normal"> ({s.num_evals})</span> : null}
+                            {s.num_evals ? (
+                              <span className="text-gray-300 font-normal">
+                                {" "}
+                                ({s.num_evals})
+                              </span>
+                            ) : null}
                           </span>
                         )}
                         <button
@@ -642,7 +759,10 @@ export default function GeneratedSchedulesPanel({
           scheduleB={sorted[compareSelected[1]]}
           idxA={compareSelected[0]}
           idxB={compareSelected[1]}
-          onClose={() => { setCompare([]); setCompareMode(false); }}
+          onClose={() => {
+            setCompare([]);
+            setCompareMode(false);
+          }}
         />
       )}
     </div>
