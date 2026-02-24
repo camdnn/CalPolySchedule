@@ -61,8 +61,8 @@ function ratingColor(r: number | null): string {
 // Shared badge style system for avg-rating pills.
 function ratingBadge(r: number | null): string {
   if (r === null) return "bg-gray-50 text-gray-400 border border-gray-200";
-  if (r >= 4.0) return "bg-green-50 text-green-700 border border-green-200";
-  if (r >= 3.0) return "bg-yellow-50 text-yellow-700 border border-yellow-200";
+  if (r >= 3.0) return "bg-green-50 text-green-700 border border-green-200";
+  if (r >= 2.0) return "bg-yellow-50 text-yellow-700 border border-yellow-200";
   return "bg-red-50 text-red-600 border border-red-200";
 }
 

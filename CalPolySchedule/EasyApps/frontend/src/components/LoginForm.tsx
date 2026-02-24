@@ -50,7 +50,6 @@ export default function LoginForm({ isLoggedIn, setIsLoggedIn }: LoginFormProps)
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             placeholder="Enter your name"
-            autoFocus
             className="
               w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl
               text-gray-950 text-base outline-none transition-all duration-200
