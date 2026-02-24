@@ -401,7 +401,7 @@ export default function GeneratedSchedulesPanel({
 
         <div className="flex items-center gap-2 flex-wrap">
           {/* Sort pills */}
-          <div className="overflow-x-auto max-w-[calc(100vw-8rem)] md:max-w-none">
+          <div className="overflow-x-auto max-w-full md:max-w-none">
           <div
             className="flex rounded-lg overflow-hidden border border-gray-200 min-w-max"
             role="radiogroup"
@@ -477,19 +477,25 @@ export default function GeneratedSchedulesPanel({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold text-gray-950">Schedule {idx + 1}</h3>
-                  {/* Metadata pills */}
-                  <span className="text-xs text-gray-400">
+                  {/* Metadata — inline on desktop, hidden on mobile (shown as subtitle below) */}
+                  <span className="hidden md:inline text-xs text-gray-400">
                     {sched.daysOnCampus} day{sched.daysOnCampus !== 1 ? "s" : ""}
                   </span>
                   {sched.totalGap > 0 && (
-                    <span className="text-xs text-gray-400">
+                    <span className="hidden md:inline text-xs text-gray-400">
                       · {Math.round(sched.totalGap / 6) / 10}h gaps
                     </span>
                   )}
                   {sched.totalGap === 0 && (
-                    <span className="text-xs text-green-600">· no gaps</span>
+                    <span className="hidden md:inline text-xs text-green-600">· no gaps</span>
                   )}
                 </div>
+                {/* Mobile-only subtitle: days · gaps on their own line */}
+                <p className="md:hidden text-xs text-gray-400 mt-0.5">
+                  {sched.daysOnCampus} day{sched.daysOnCampus !== 1 ? "s" : ""}
+                  {sched.totalGap > 0 && ` · ${Math.round(sched.totalGap / 6) / 10}h gaps`}
+                  {sched.totalGap === 0 && <span className="text-green-600"> · no gaps</span>}
+                </p>
                 <p className="text-gray-400 text-xs mt-0.5">
                   {sched.sections.length} section{sched.sections.length !== 1 ? "s" : ""}
                 </p>
@@ -497,11 +503,11 @@ export default function GeneratedSchedulesPanel({
 
               {/* Avg rating badge */}
               {sched.avgRating !== null ? (
-                <span className={`text-sm font-bold px-3 py-1 rounded-full flex-shrink-0 ${ratingBadge(sched.avgRating)}`}>
+                <span className={`text-xs md:text-sm font-bold px-2 md:px-3 py-0.5 md:py-1 rounded-full flex-shrink-0 ${ratingBadge(sched.avgRating)}`}>
                   {sched.avgRating.toFixed(2)} ★ avg
                 </span>
               ) : (
-                <span className="text-xs text-gray-300 bg-gray-50 px-3 py-1 rounded-full flex-shrink-0">
+                <span className="text-xs text-gray-300 bg-gray-50 px-2 md:px-3 py-0.5 md:py-1 rounded-full flex-shrink-0">
                   no ratings
                 </span>
               )}

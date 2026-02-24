@@ -154,38 +154,39 @@ export default function ClassResultsPanel({
                       }`}
                     >
                       {/* ── Row 1: Time · Days · [lock] · Seats ───────────── */}
-                      <div className="flex items-center gap-2 mb-1.5">
-                        {/* Days + time — primary info, always first */}
-                        <span className="font-semibold text-gray-950 text-sm">
-                          {formatDays(section.days)}
-                        </span>
-                        {section.start_time && section.end_time && (
-                          <span className="text-gray-600 text-sm">
-                            · {formatTime(section.start_time)}–{formatTime(section.end_time)}
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        {/* Left group: days + time + lock — wraps on narrow screens */}
+                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
+                          <span className="font-semibold text-gray-950 text-sm">
+                            {formatDays(section.days)}
                           </span>
-                        )}
+                          {section.start_time && section.end_time && (
+                            <span className="text-gray-600 text-sm whitespace-nowrap">
+                              · {formatTime(section.start_time)}–{formatTime(section.end_time)}
+                            </span>
+                          )}
 
-                        {/* Lock button — hidden until hover (or always visible if locked) */}
-                        {/* This calls parent handler so lock state is shared across
-                            both section and generated-schedule views. */}
-                        <button
-                          onClick={() => onLock(section)}
-                          title={isLocked ? "Unlock this section" : "Lock and regenerate around this section"}
-                          aria-pressed={isLocked}
-                          className={`
-                            text-xs px-2 py-0.5 rounded-full border transition-all duration-150 cursor-pointer
-                            ${isLocked
-                              ? "bg-green-100 border-green-300 text-green-700 font-medium"
-                              : "bg-gray-100 border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-700 md:opacity-0 md:group-hover:opacity-100"
-                            }
-                          `}
-                        >
-                          {isLocked ? "📌 Locked" : "📌 Pin"}
-                        </button>
+                          {/* Lock button — hidden until hover (or always visible if locked) */}
+                          {/* This calls parent handler so lock state is shared across
+                              both section and generated-schedule views. */}
+                          <button
+                            onClick={() => onLock(section)}
+                            title={isLocked ? "Unlock this section" : "Lock and regenerate around this section"}
+                            aria-pressed={isLocked}
+                            className={`
+                              text-xs px-2 py-0.5 rounded-full border transition-all duration-150 cursor-pointer
+                              ${isLocked
+                                ? "bg-green-100 border-green-300 text-green-700 font-medium"
+                                : "bg-gray-100 border-gray-200 text-gray-500 hover:border-green-300 hover:text-green-700 md:opacity-0 md:group-hover:opacity-100"
+                              }
+                            `}
+                          >
+                            {isLocked ? "📌 Locked" : "📌 Pin"}
+                          </button>
+                        </div>
 
-                        {/* Seats — pushed right, accessible with text + dot */}
-                        {/* Dot color and text both encode seat status for clarity. */}
-                        <div className="ml-auto flex items-center gap-1.5 text-xs">
+                        {/* Seats — always pinned to the right, never wraps */}
+                        <div className="flex items-center gap-1.5 text-xs flex-shrink-0">
                           <span
                             className={`w-1.5 h-1.5 rounded-full inline-block flex-shrink-0 ${
                               seats === null ? "bg-gray-300"

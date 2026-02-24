@@ -475,7 +475,7 @@ export default function Dashboard() {
                   onKeyDown={(e) => e.key === "Enter" && handleCourseAdd()}
                   onPaste={handleCoursePaste}
                   placeholder='e.g. "CSC 101" or paste a list'
-                  className="flex-1 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none
+                  className="flex-1 px-3 py-2 text-base bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none
                   placeholder:text-gray-400 focus:border-green-600 focus:ring-2 focus:ring-green-600/10 focus:bg-white"
                 />
                 <button
@@ -612,7 +612,7 @@ export default function Dashboard() {
                     type="time"
                     value={timeStart}
                     onChange={(e) => setTimeStart(e.target.value)}
-                    className="w-full px-2 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none focus:border-green-600"
+                    className="w-full px-2 py-1.5 text-base bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none focus:border-green-600"
                   />
                 </div>
                 <div className="flex-1">
@@ -623,7 +623,7 @@ export default function Dashboard() {
                     type="time"
                     value={timeEnd}
                     onChange={(e) => setTimeEnd(e.target.value)}
-                    className="w-full px-2 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none focus:border-green-600"
+                    className="w-full px-2 py-1.5 text-base bg-gray-50 border border-gray-200 rounded-lg text-gray-950 outline-none focus:border-green-600"
                   />
                 </div>
               </div>
@@ -815,7 +815,7 @@ export default function Dashboard() {
         {/* pointer-events-none + overflow-hidden when drawer is open: prevents scroll and interaction
           behind the backdrop without any body-level hacks. */}
         <main
-          className={`flex-1 p-4 md:p-8 bg-gray-50 ${sidebarOpen ? "overflow-hidden pointer-events-none" : "overflow-y-auto"}`}
+          className={`flex-1 p-4 md:p-8 bg-gray-50 overflow-x-hidden ${sidebarOpen ? "overflow-hidden pointer-events-none" : "overflow-y-auto"}`}
         >
           {/* Active filter chips */}
           {/* Quick visibility into active constraints + one-click removal. */}

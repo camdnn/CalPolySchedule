@@ -1,2 +1,10 @@
 @import "tailwindcss";
 
+/* Prevent iOS from zooming to fit overflowing content when new data loads.
+   overflow-x:hidden on html clips any element that accidentally exceeds 100vw,
+   and stops the browser from adjusting page scale to fit that content. */
+html,
+body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
