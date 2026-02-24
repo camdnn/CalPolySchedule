@@ -2,6 +2,7 @@ import { useState } from "react";
 import LoginForm from "./components/LoginForm.tsx";
 import Loading from "./components/Loading.tsx";
 import Dashboard from "./components/CalendarCreation.tsx";
+import ContactWidget from "./components/ContactWidget.tsx";
 
 export default function App() {
   // `isLoggedIn`: user has submitted the login form.
@@ -36,6 +37,9 @@ export default function App() {
       {/* ── Dashboard ─────────────────────────────────────────────────── */}
       {/* Main app shell renders only when auth transition is complete. */}
       {showDashboard && <Dashboard />}
+
+      {/* ── Contact widget (always mounted, floats over all content) ── */}
+      <ContactWidget />
     </div>
   );
 }
