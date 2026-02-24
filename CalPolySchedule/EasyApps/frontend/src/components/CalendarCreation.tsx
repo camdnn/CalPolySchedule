@@ -107,9 +107,7 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // On mobile, open the sidebar by default so filters are immediately visible.
-  // Also reset scroll position so the header is always visible on first load.
   useEffect(() => {
-    window.scrollTo(0, 0);
     if (window.innerWidth < 768) setSidebarOpen(true);
   }, []);
 
@@ -202,7 +200,6 @@ export default function Dashboard() {
   const handleFindSections = async () => {
     if (!selectedTerm || courses.length === 0) return;
     setSidebarOpen(false); // auto-close drawer on mobile
-    window.scrollTo(0, 0);
     setIsSearching(true);
     setViewMode("sections");
     try {
@@ -223,7 +220,6 @@ export default function Dashboard() {
   const handleGenerateSchedules = async () => {
     if (!selectedTerm || courses.length === 0) return;
     setSidebarOpen(false); // auto-close drawer on mobile
-    window.scrollTo(0, 0);
     setIsGenerating(true);
     setViewMode("schedules");
     try {
