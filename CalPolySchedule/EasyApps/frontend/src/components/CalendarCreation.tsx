@@ -26,7 +26,7 @@ const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 // Single source of truth for initial filter values and reset behavior.
 const DEFAULTS = {
-  minRating: 3.0,
+  minRating: 2.0,
   openOnly: false,
   timeStart: "08:00",
   timeEnd: "17:00",
