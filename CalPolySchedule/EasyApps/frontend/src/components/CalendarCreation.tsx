@@ -11,6 +11,7 @@ import type {
 import ClassResultsPanel from "./ClassResultsPanel.tsx";
 import GeneratedSchedulesPanel from "./GeneratedSchedulesPanel.tsx";
 import WeekBlockGrid from "./WeekBlockGrid.tsx";
+import LoadingStatus from "./LoadingStatus.tsx";
 
 // ── Constants / helpers ───────────────────────────────────────────────────────
 // Maps UI day labels to backend single-letter day codes.
@@ -457,9 +458,7 @@ export default function Dashboard() {
                     {term.display}
                   </button>
                 ))}
-                {terms.length === 0 && (
-                  <p className="text-gray-400 text-xs">Loading terms…</p>
-                )}
+                {terms.length === 0 && <LoadingStatus />}
               </div>
             </section>
 
