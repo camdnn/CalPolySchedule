@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 
 const MESSAGES = [
+  "Waking up",
   "Connecting",
-  "Loading terms",
+  "Telling the hampsters to run faster",
   "Fetching classes",
   "Loading courses",
-  "Almost ready",
+  "Almost There (we think)",
+  "Praying to the Javascript Gods",
 ];
 
 interface LoadingStatusProps {
@@ -15,7 +17,7 @@ interface LoadingStatusProps {
 
 export default function LoadingStatus({
   messages = MESSAGES,
-  intervalMs = 1600,
+  intervalMs = 2000,
 }: LoadingStatusProps) {
   const [index, setIndex] = useState(0);
 
