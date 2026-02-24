@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 type FormState = { name: string; email: string; message: string };
 type Status = "idle" | "submitting" | "success" | "error";
 
-const ENDPOINT = import.meta.env.VITE_FORMSPREE_ENDPOINT as string;
+const ENDPOINT = "https://formspree.io/f/xgolpqek";
 const EMPTY: FormState = { name: "", email: "", message: "" };
 
 export default function ContactWidget() {
