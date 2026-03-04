@@ -77,12 +77,10 @@ export default function WeekBlockGrid({ value, onChange }: WeekBlockGridProps) {
   }, [value]);
 
   // Debounced propagation to parent
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
   useEffect(() => {
-    const t = setTimeout(() => onChangeRef.current(cellsToSlots(cells)), 60);
+    const t = setTimeout(() => onChange(cellsToSlots(cells)), 60);
     return () => clearTimeout(t);
-  }, [cells]);
+  }, [cells, onChange]);
 
   // Release drag on pointerup anywhere in the window (covers mouse + touch)
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import type {
   GeneratedSchedule,
   ScheduleRowProps,
@@ -398,17 +398,15 @@ export default function GeneratedSchedulesPanel({
   // Stores the most recently copied card index for temporary success feedback.
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
-  // Reset compare + sort when new schedules arrive
-  // This prevents stale compare selections referencing old result sets.
-  const prevSchedulesRef = useRef(schedules);
-  useEffect(() => {
-    if (prevSchedulesRef.current !== schedules) {
-      prevSchedulesRef.current = schedules;
-      setSortMode(defaultSort);
-      setCompareMode(false);
-      setCompare([]);
-    }
-  }, [schedules, defaultSort]);
+  // Reset compare + sort when new schedules arrive.
+  // Done during render (not in a useEffect) so React skips the extra paint cycle.
+  const [prevSchedules, setPrevSchedules] = useState(schedules);
+  if (prevSchedules !== schedules) {
+    setPrevSchedules(schedules);
+    setSortMode(defaultSort);
+    setCompareMode(false);
+    setCompare([]);
+  }
 
   if (!hasGenerated) {
     return (
